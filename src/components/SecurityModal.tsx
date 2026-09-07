@@ -8,9 +8,10 @@ interface SecurityModalProps {
   isOpen: boolean;
   onClose: () => void;
   docState: PDFDocumentState;
+  onShowToast?: (text: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-export const SecurityModal: React.FC<SecurityModalProps> = ({ isOpen, onClose, docState }) => {
+export const SecurityModal: React.FC<SecurityModalProps> = ({ isOpen, onClose, docState, onShowToast }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [ownerPassword, setOwnerPassword] = useState('');
@@ -22,15 +23,20 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({ isOpen, onClose, d
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  const notify = (text: string, type: 'success' | 'error' | 'info' = 'error') => {
+    if (onShowToast) onShowToast(text, type);
+    else alert(text);
+  };
+
   if (!isOpen) return null;
 
   const handleApplySecurity = async () => {
     if (!password.trim()) {
-      alert('Lütfen bir açılış parolası girin.');
+      notify('Lütfen bir açılış parolası girin.', 'error');
       return;
     }
     if (password !== confirmPassword) {
-      alert('Girdiğiniz açılış parolaları birbiriyle eşleşmiyor.');
+      notify('Girdiğiniz açılış parolaları birbiriyle eşleşmiyor.', 'error');
       return;
     }
 
@@ -86,12 +92,13 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({ isOpen, onClose, d
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        notify('Şifrelenmiş PDF başarıyla indirildi.', 'success');
         onClose();
       }
     } catch (err: unknown) {
       console.error('Security export error:', err);
       const msg = err instanceof Error ? err.message : String(err);
-      alert('Şifreleme sırasında hata oluştu: ' + msg);
+      notify('Şifreleme sırasında hata oluştu: ' + msg, 'error');
     } finally {
       setIsProcessing(false);
     }

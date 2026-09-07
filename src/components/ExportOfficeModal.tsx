@@ -20,6 +20,7 @@ interface ExportOfficeModalProps {
   isOpen: boolean;
   onClose: () => void;
   docState: PDFDocumentState;
+  onShowToast?: (text: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 type ExportFormat = 'docx' | 'xlsx' | 'pptx' | 'txt' | 'md' | 'html';
@@ -29,11 +30,17 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
   isOpen,
   onClose,
   docState,
+  onShowToast,
 }) => {
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('docx');
   const [includePageNumbers, setIncludePageNumbers] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [exportedSuccess, setExportedSuccess] = useState<string | null>(null);
+
+  const notify = (text: string, type: 'success' | 'error' | 'info' = 'error') => {
+    if (onShowToast) onShowToast(text, type);
+    else alert(text);
+  };
   const [pageRangeMode, setPageRangeMode] = useState<'all' | 'custom'>('all');
   const [customPages, setCustomPages] = useState('1');
   const [saveLocationMode, setSaveLocationMode] = useState<SaveLocationMode>('ask');
@@ -422,7 +429,7 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
       }, 500);
     } catch (err) {
       console.error('Export failed:', err);
-      alert('Dışa aktarma sırasında bir hata oluştu.');
+      notify('Dışa aktarma sırasında bir hata oluştu.', 'error');
       setIsExporting(false);
     }
   };

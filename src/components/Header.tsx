@@ -30,7 +30,10 @@ import {
   Hash,
   GitCompare,
   FileSpreadsheet,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Command,
+  Info,
+  Maximize2
 } from 'lucide-react';
 import type { PDFDocumentState, ReaderFilter } from '../types/pdf';
 
@@ -74,6 +77,10 @@ interface HeaderProps {
   onToggleSearch: () => void;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  onOpenProperties?: () => void;
+  onOpenCommandPalette?: () => void;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -116,6 +123,10 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleSearch,
   sidebarOpen,
   onToggleSidebar,
+  onOpenProperties,
+  onOpenCommandPalette,
+  isFullscreen = false,
+  onToggleFullscreen,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pageInput, setPageInput] = useState(String(currentPageNumber || 1));
@@ -368,6 +379,26 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Lock size={14} color="#a855f7" /> PDF Parola & Şifreleme
               </button>
+
+              {onOpenProperties && docState.data && (
+                <button
+                  onClick={() => { onOpenProperties(); setToolsDropdownOpen(false); }}
+                  className="btn-ghost"
+                  style={{ justifyContent: 'flex-start', padding: '7px 10px', fontSize: '12px', gap: '8px' }}
+                >
+                  <Info size={14} color="#0ea5e9" /> Belge Özellikleri & Meta Veriler (Ctrl+D)
+                </button>
+              )}
+
+              {onOpenCommandPalette && (
+                <button
+                  onClick={() => { onOpenCommandPalette(); setToolsDropdownOpen(false); }}
+                  className="btn-ghost"
+                  style={{ justifyContent: 'flex-start', padding: '7px 10px', fontSize: '12px', gap: '8px' }}
+                >
+                  <Command size={14} color="var(--accent-primary)" /> Hızlı Komut Paleti (Ctrl+K)
+                </button>
+              )}
 
               <button
                 onClick={() => { onOpenSettingsModal(); setToolsDropdownOpen(false); }}
@@ -622,6 +653,28 @@ export const Header: React.FC<HeaderProps> = ({
         >
           {theme === 'dark' ? <Sun size={15} color="#f59e0b" /> : <Moon size={15} />}
         </button>
+
+        {onOpenCommandPalette && (
+          <button 
+            onClick={onOpenCommandPalette} 
+            className="btn-icon" 
+            data-tooltip="Hızlı Komut Paleti (Ctrl+K)"
+            style={{ width: '30px', height: '30px' }}
+          >
+            <Command size={15} color="var(--accent-primary)" />
+          </button>
+        )}
+
+        {onToggleFullscreen && (
+          <button 
+            onClick={onToggleFullscreen} 
+            className={`btn-icon ${isFullscreen ? 'active' : ''}`} 
+            data-tooltip={isFullscreen ? 'Tam Ekrandan Çık (Esc / F11)' : 'Sunum & Tam Ekran Modu (F11)'}
+            style={{ width: '30px', height: '30px' }}
+          >
+            {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
+        )}
 
         <button 
           onClick={onOpenSettingsModal} 

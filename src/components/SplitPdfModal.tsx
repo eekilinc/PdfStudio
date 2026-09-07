@@ -7,14 +7,20 @@ interface SplitPdfModalProps {
   isOpen: boolean;
   onClose: () => void;
   docState: PDFDocumentState;
+  onShowToast?: (text: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-export const SplitPdfModal: React.FC<SplitPdfModalProps> = ({ isOpen, onClose, docState }) => {
+export const SplitPdfModal: React.FC<SplitPdfModalProps> = ({ isOpen, onClose, docState, onShowToast }) => {
   const [splitMode, setSplitMode] = useState<'range' | 'single' | 'even_odd' | 'chunk'>('range');
   const [rangeInput, setRangeInput] = useState('1-3');
   const [chunkSize, setChunkSize] = useState(2);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+
+  const notify = (text: string, type: 'success' | 'error' | 'info' = 'error') => {
+    if (onShowToast) onShowToast(text, type);
+    else alert(text);
+  };
 
   if (!isOpen) return null;
 
@@ -58,7 +64,7 @@ export const SplitPdfModal: React.FC<SplitPdfModalProps> = ({ isOpen, onClose, d
       if (splitMode === 'range') {
         const targetPageNumbers = parsePageRange(rangeInput, totalPages);
         if (targetPageNumbers.length === 0) {
-          alert('Geçerli bir sayfa aralığı girin (Örn: 1-5 veya 2, 4, 7-9).');
+          notify('Geçerli bir sayfa aralığı girin (Örn: 1-5 veya 2, 4, 7-9).', 'error');
           setIsProcessing(false);
           return;
         }
@@ -122,10 +128,11 @@ export const SplitPdfModal: React.FC<SplitPdfModalProps> = ({ isOpen, onClose, d
         }
       }
 
+      notify('PDF sayfaları başarıyla ayrıştırıldı ve indirildi.', 'success');
       onClose();
     } catch (err) {
       console.error('Split error:', err);
-      alert('Bölme işlemi sırasında hata oluştu: ' + (err as Error).message);
+      notify('Bölme işlemi sırasında hata oluştu: ' + (err as Error).message, 'error');
     } finally {
       setIsProcessing(false);
     }

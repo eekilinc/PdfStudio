@@ -8,6 +8,7 @@ interface ExportImageModalProps {
   onClose: () => void;
   docState: PDFDocumentState;
   currentPageNumber: number;
+  onShowToast?: (text: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export const ExportImageModal: React.FC<ExportImageModalProps> = ({
@@ -15,12 +16,18 @@ export const ExportImageModal: React.FC<ExportImageModalProps> = ({
   onClose,
   docState,
   currentPageNumber,
+  onShowToast,
 }) => {
   const [format, setFormat] = useState<'image/png' | 'image/jpeg'>('image/png');
   const [scale, setScale] = useState<number>(2.0); // 2x high resolution
   const [scope, setScope] = useState<'current' | 'all'>('current');
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState(0);
+
+  const notify = (text: string, type: 'success' | 'error' | 'info' = 'error') => {
+    if (onShowToast) onShowToast(text, type);
+    else alert(text);
+  };
 
   if (!isOpen) return null;
 
@@ -86,10 +93,11 @@ export const ExportImageModal: React.FC<ExportImageModalProps> = ({
         }
       }
 
+      notify('Resim dışa aktarma başarıyla tamamlandı.', 'success');
       onClose();
     } catch (err) {
       console.error('Image export error:', err);
-      alert('Resim dışa aktarılırken hata oluştu: ' + (err as Error).message);
+      notify('Resim dışa aktarılırken hata oluştu: ' + (err as Error).message, 'error');
     } finally {
       setIsExporting(false);
     }

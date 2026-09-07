@@ -6,6 +6,7 @@ interface MergePdfModalProps {
   isOpen: boolean;
   onClose: () => void;
   onApplyMerged: (mergedBytes: Uint8Array, filename: string) => void;
+  onShowToast?: (text: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 interface MergeItem {
@@ -19,9 +20,15 @@ export const MergePdfModal: React.FC<MergePdfModalProps> = ({
   isOpen,
   onClose,
   onApplyMerged,
+  onShowToast,
 }) => {
   const [items, setItems] = useState<MergeItem[]>([]);
   const [isMerging, setIsMerging] = useState(false);
+
+  const notify = (text: string, type: 'success' | 'error' | 'info' = 'error') => {
+    if (onShowToast) onShowToast(text, type);
+    else alert(text);
+  };
 
   if (!isOpen) return null;
 
@@ -68,10 +75,11 @@ export const MergePdfModal: React.FC<MergePdfModalProps> = ({
 
       const mergedBytes = await mergedPdf.save();
       onApplyMerged(mergedBytes, `Birlestirilmis_Belge_${Date.now()}.pdf`);
+      notify(`${items.length} PDF belgesi başarıyla birleştirildi.`, 'success');
       onClose();
     } catch (err) {
       console.error('Merge PDF Error:', err);
-      alert('PDF birleştirme işlemi sırasında hata oluştu.');
+      notify('PDF birleştirme işlemi sırasında hata oluştu.', 'error');
     } finally {
       setIsMerging(false);
     }

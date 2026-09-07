@@ -8,12 +8,18 @@ interface CompressModalProps {
   isOpen: boolean;
   onClose: () => void;
   docState: PDFDocumentState;
+  onShowToast?: (text: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-export const CompressModal: React.FC<CompressModalProps> = ({ isOpen, onClose, docState }) => {
+export const CompressModal: React.FC<CompressModalProps> = ({ isOpen, onClose, docState, onShowToast }) => {
   const [level, setLevel] = useState<'low' | 'medium' | 'high'>('medium');
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+
+  const notify = (text: string, type: 'success' | 'error' | 'info' = 'error') => {
+    if (onShowToast) onShowToast(text, type);
+    else alert(text);
+  };
 
   if (!isOpen) return null;
 
@@ -89,10 +95,11 @@ export const CompressModal: React.FC<CompressModalProps> = ({ isOpen, onClose, d
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
+      notify('PDF başarıyla optimize edildi ve indirildi.', 'success');
       onClose();
     } catch (err) {
       console.error('Compress error:', err);
-      alert('Sıkıştırma sırasında bir hata oluştu: ' + (err as Error).message);
+      notify('Sıkıştırma sırasında bir hata oluştu: ' + (err as Error).message, 'error');
     } finally {
       setIsProcessing(false);
     }

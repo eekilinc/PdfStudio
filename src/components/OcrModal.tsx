@@ -11,6 +11,7 @@ interface OcrModalProps {
   pageNumber: number;
   pageIndex: number;
   onApplyOcrAnnotations: (pageIndex: number, annotations: TextAnnotation[]) => void;
+  onShowToast?: (text: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export const OcrModal: React.FC<OcrModalProps> = ({
@@ -20,9 +21,15 @@ export const OcrModal: React.FC<OcrModalProps> = ({
   pageNumber,
   pageIndex,
   onApplyOcrAnnotations,
+  onShowToast,
 }) => {
   const [lang, setLang] = useState<'tur' | 'eng' | 'tur+eng'>('tur+eng');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const notify = (text: string, type: 'success' | 'error' | 'info' = 'error') => {
+    if (onShowToast) onShowToast(text, type);
+    else alert(text);
+  };
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState('');
   const [recognizedText, setRecognizedText] = useState<string>('');
@@ -106,9 +113,10 @@ export const OcrModal: React.FC<OcrModalProps> = ({
       }
 
       setExtractedLines(lines);
+      notify('OCR metin tanıma tamamlandı.', 'success');
     } catch (err) {
       console.error('OCR Error:', err);
-      alert('OCR işlemi sırasında bir hata oluştu: ' + (err as Error).message);
+      notify('OCR işlemi sırasında bir hata oluştu: ' + (err as Error).message, 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -118,12 +126,14 @@ export const OcrModal: React.FC<OcrModalProps> = ({
     if (!recognizedText) return;
     navigator.clipboard.writeText(recognizedText);
     setIsCopied(true);
+    notify('Tanınan metin panoya kopyalandı.', 'info');
     setTimeout(() => setIsCopied(false), 2000);
   };
 
   const handleApplyToPdf = () => {
     if (extractedLines.length === 0) return;
     onApplyOcrAnnotations(pageIndex, extractedLines);
+    notify('OCR metin katmanı PDF sayfasına uygulandı.', 'success');
     onClose();
   };
 

@@ -21,7 +21,9 @@ import { PDFViewer } from './components/PDFViewer';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { SearchBar } from './components/SearchBar';
 
-// Lazy-loaded modals to optimize initial bundle size & load on demand
+import { CheckCircle2, AlertCircle, Info, ChevronLeft, ChevronRight, Minimize2 } from 'lucide-react';
+
+// Lazy-loaded modals & components to optimize initial bundle size & load on demand
 const SignatureModal = lazy(() => import('./components/SignatureModal').then(m => ({ default: m.SignatureModal })));
 const StampModal = lazy(() => import('./components/StampModal').then(m => ({ default: m.StampModal })));
 const PageOrganizeModal = lazy(() => import('./components/PageOrganizeModal').then(m => ({ default: m.PageOrganizeModal })));
@@ -37,6 +39,9 @@ const SplitPdfModal = lazy(() => import('./components/SplitPdfModal').then(m => 
 const PageNumberingModal = lazy(() => import('./components/PageNumberingModal').then(m => ({ default: m.PageNumberingModal })));
 const ComparePdfModal = lazy(() => import('./components/ComparePdfModal').then(m => ({ default: m.ComparePdfModal })));
 const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
+const DocPropertiesModal = lazy(() => import('./components/DocPropertiesModal').then(m => ({ default: m.DocPropertiesModal })));
+const CommandPalette = lazy(() => import('./components/CommandPalette').then(m => ({ default: m.CommandPalette })));
+const StatusBar = lazy(() => import('./components/StatusBar').then(m => ({ default: m.StatusBar })));
 
 import { loadSettings, saveSettings } from './types/settings';
 import type { AppSettings } from './types/settings';
@@ -136,6 +141,13 @@ export function App() {
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
   const [isPageNumberingModalOpen, setIsPageNumberingModalOpen] = useState(false);
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+  const [isDocPropertiesOpen, setIsDocPropertiesOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+
+  const handleFitPage = () => setZoom(0.85);
+  const handleFitWidth = () => setZoom(1.25);
 
   const handleSaveSettings = (newSettings: AppSettings) => {
     setSettings(newSettings);
@@ -220,9 +232,10 @@ export function App() {
       setSelectedAnnotation(null);
       setSearchMatches([]);
       setActiveMatchIndex(-1);
+      setIsDirty(false);
     } catch (err) {
       console.error('PDF parsing error:', err);
-      alert('PDF dosyası açılırken bir hata oluştu.');
+      showToast('PDF dosyası açılırken bir hata oluştu.', 'error');
     }
   };
 
@@ -319,6 +332,7 @@ export function App() {
         return [...sliced, nextState];
       });
       setHistoryIndex((prevIdx) => prevIdx + 1);
+      setIsDirty(true);
       return nextState;
     });
   }, [historyIndex]);
@@ -347,7 +361,7 @@ export function App() {
       showToast(`Açıldı: ${filename}`, 'info');
     } catch (err) {
       console.error('Failed to open recent file:', err);
-      alert('Dosya açılamadı veya taşınmış olabilir: ' + path);
+      showToast('Dosya açılamadı veya taşınmış olabilir: ' + path, 'error');
     }
   };
 
@@ -427,6 +441,7 @@ export function App() {
           path: currentFilePath,
           contents: Array.from(exportedBytes),
         });
+        setIsDirty(false);
         showToast(`✓ Kaydedildi: ${docState.filename}`, 'success');
         return;
       } catch (err) {
@@ -457,6 +472,7 @@ export function App() {
           const newFilename = chosenPath.split(/[\\/]/).pop() || defaultName;
           setCurrentFilePath(chosenPath);
           setDocState(prev => ({ ...prev, filename: newFilename }));
+          setIsDirty(false);
           showToast(`✓ Farklı kaydedildi: ${newFilename}`, 'success');
           return;
         } else {
@@ -474,11 +490,12 @@ export function App() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        setIsDirty(false);
         showToast('✓ PDF İndirildi', 'success');
       }
     } catch (err) {
       console.error('Save As error:', err);
-      alert('PDF kaydedilirken bir hata oluştu: ' + (err as Error).message);
+      showToast('PDF kaydedilirken bir hata oluştu: ' + (err as Error).message, 'error');
     }
   };
 
@@ -762,24 +779,28 @@ export function App() {
 
   // Keep actions ref updated for window keyboard listener without rebinding
   const actionsRef = useRef({
-    handleUndo,
-    handleRedo,
-    handleSavePdf,
-    handleSaveAsPdf,
-    handleOpenNativePdf,
-    handleDeleteSelectedAnnotation,
-    selectedAnnotation,
+    undo: handleUndo,
+    redo: handleRedo,
+    save: handleSavePdf,
+    saveAs: handleSaveAsPdf,
+    openNative: handleOpenNativePdf,
+    deleteAnnotation: handleDeleteSelectedAnnotation,
+    selectedAnn: selectedAnnotation,
+    hasDocData: !!docState.data,
+    fullscreen: isFullscreen,
   });
 
   useEffect(() => {
     actionsRef.current = {
-      handleUndo,
-      handleRedo,
-      handleSavePdf,
-      handleSaveAsPdf,
-      handleOpenNativePdf,
-      handleDeleteSelectedAnnotation,
-      selectedAnnotation,
+      undo: handleUndo,
+      redo: handleRedo,
+      save: handleSavePdf,
+      saveAs: handleSaveAsPdf,
+      openNative: handleOpenNativePdf,
+      deleteAnnotation: handleDeleteSelectedAnnotation,
+      selectedAnn: selectedAnnotation,
+      hasDocData: !!docState.data,
+      fullscreen: isFullscreen,
     };
   });
 
@@ -787,33 +808,67 @@ export function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const act = actionsRef.current;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        if (act.hasDocData) {
+          e.preventDefault();
+          setIsDocPropertiesOpen(true);
+        }
+        return;
+      }
+      if (e.key === 'F11') {
+        e.preventDefault();
+        setIsFullscreen((prev) => !prev);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+        e.preventDefault();
+        setZoom(0.85);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === '1') {
+        e.preventDefault();
+        setZoom(1.0);
+        return;
+      }
+      if (e.key === 'Escape') {
+        if (act.fullscreen) {
+          e.preventDefault();
+          setIsFullscreen(false);
+          return;
+        }
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         setIsSearchOpen((prev) => !prev);
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
         e.preventDefault();
-        act.handleUndo();
+        act.undo();
       }
       if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
         e.preventDefault();
-        act.handleRedo();
+        act.redo();
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (e.shiftKey) {
-          act.handleSaveAsPdf();
+          act.saveAs();
         } else {
-          act.handleSavePdf();
+          act.save();
         }
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
         e.preventDefault();
-        act.handleOpenNativePdf();
+        act.openNative();
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && act.selectedAnnotation && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && act.selectedAnn && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
         e.preventDefault();
-        act.handleDeleteSelectedAnnotation();
+        act.deleteAnnotation();
       }
       if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
         if (e.key.toLowerCase() === 'v') setActiveConfig((prev) => ({ ...prev, tool: 'select' }));
@@ -847,13 +902,20 @@ export function App() {
             top: '56px',
             left: '50%',
             transform: 'translateX(-50%)',
-            background: toast.type === 'success' ? '#059669' : toast.type === 'error' ? '#ef4444' : '#2563eb',
+            background: toast.type === 'success' 
+              ? 'linear-gradient(135deg, rgba(5, 150, 105, 0.95), rgba(16, 185, 129, 0.95))' 
+              : toast.type === 'error' 
+              ? 'linear-gradient(135deg, rgba(220, 38, 38, 0.95), rgba(239, 68, 68, 0.95))' 
+              : 'linear-gradient(135deg, rgba(37, 99, 235, 0.95), rgba(59, 130, 246, 0.95))',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
             color: '#ffffff',
-            padding: '7px 18px',
+            padding: '8px 20px',
             borderRadius: 'var(--radius-full)',
-            fontSize: '12px',
+            fontSize: '12.5px',
             fontWeight: 600,
-            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
+            boxShadow: '0 12px 30px -4px rgba(0, 0, 0, 0.5), 0 0 15px rgba(56, 189, 248, 0.2)',
             zIndex: 9999,
             display: 'flex',
             alignItems: 'center',
@@ -861,52 +923,61 @@ export function App() {
             pointerEvents: 'none',
           }}
         >
+          {toast.type === 'success' && <CheckCircle2 size={16} />}
+          {toast.type === 'error' && <AlertCircle size={16} />}
+          {toast.type === 'info' && <Info size={16} />}
           <span>{toast.text}</span>
         </div>
       )}
 
-      {/* 1. Top Header */}
-      <Header
-        docState={docState}
-        currentPageNumber={currentDisplayPageNumber}
-        totalPages={activePages.length}
-        onPageNumberChange={handlePageNumberJump}
-        onOpenPdf={handleOpenPdfFile}
-        onOpenNativePdf={handleOpenNativePdf}
-        onCloseDocument={handleCloseDocument}
-        onLoadSample={loadSampleDocument}
-        onSavePdf={handleSavePdf}
-        onSaveAsPdf={handleSaveAsPdf}
-        onPrint={handlePrint}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        canUndo={historyIndex > 0}
-        canRedo={historyIndex < history.length - 1}
-        zoom={zoom}
-        onZoomChange={setZoom}
-        onFitWidth={() => setZoom(1.25)}
-        onFitPage={() => setZoom(0.85)}
-        theme={theme}
-        onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        onOpenOrganizeModal={() => setIsOrganizeModalOpen(true)}
-        onOpenMergeModal={() => setIsMergeModalOpen(true)}
-        onOpenSplitModal={() => setIsSplitModalOpen(true)}
-        onOpenPageNumberingModal={() => setIsPageNumberingModalOpen(true)}
-        onOpenCompareModal={() => setIsCompareModalOpen(true)}
-        onOpenAboutModal={() => setIsAboutModalOpen(true)}
-        onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
-        onOpenWatermarkModal={() => setIsWatermarkModalOpen(true)}
-        onOpenExportImageModal={() => setIsExportImageModalOpen(true)}
-        onOpenExportOfficeModal={() => setIsExportOfficeModalOpen(true)}
-        onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
-        onOpenCompressModal={() => setIsCompressModalOpen(true)}
-        readerFilter={readerFilter}
-        onReaderFilterChange={setReaderFilter}
-        isSearchOpen={isSearchOpen}
-        onToggleSearch={() => setIsSearchOpen(!isSearchOpen)}
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-      />
+      {/* 1. Top Header (Hidden in Fullscreen Presentation Mode) */}
+      {!isFullscreen && (
+        <Header
+          docState={docState}
+          currentPageNumber={currentDisplayPageNumber}
+          totalPages={activePages.length}
+          onPageNumberChange={handlePageNumberJump}
+          onOpenPdf={handleOpenPdfFile}
+          onOpenNativePdf={handleOpenNativePdf}
+          onCloseDocument={handleCloseDocument}
+          onLoadSample={loadSampleDocument}
+          onSavePdf={handleSavePdf}
+          onSaveAsPdf={handleSaveAsPdf}
+          onPrint={handlePrint}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          canUndo={historyIndex > 0}
+          canRedo={historyIndex < history.length - 1}
+          zoom={zoom}
+          onZoomChange={setZoom}
+          onFitWidth={handleFitWidth}
+          onFitPage={handleFitPage}
+          theme={theme}
+          onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onOpenOrganizeModal={() => setIsOrganizeModalOpen(true)}
+          onOpenMergeModal={() => setIsMergeModalOpen(true)}
+          onOpenSplitModal={() => setIsSplitModalOpen(true)}
+          onOpenPageNumberingModal={() => setIsPageNumberingModalOpen(true)}
+          onOpenCompareModal={() => setIsCompareModalOpen(true)}
+          onOpenAboutModal={() => setIsAboutModalOpen(true)}
+          onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+          onOpenWatermarkModal={() => setIsWatermarkModalOpen(true)}
+          onOpenExportImageModal={() => setIsExportImageModalOpen(true)}
+          onOpenExportOfficeModal={() => setIsExportOfficeModalOpen(true)}
+          onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
+          onOpenCompressModal={() => setIsCompressModalOpen(true)}
+          readerFilter={readerFilter}
+          onReaderFilterChange={setReaderFilter}
+          isSearchOpen={isSearchOpen}
+          onToggleSearch={() => setIsSearchOpen(!isSearchOpen)}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          onOpenProperties={() => setIsDocPropertiesOpen(true)}
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
+        />
+      )}
 
       {/* 2. When No PDF is Loaded: Gorgeous Welcome Dashboard */}
       {!docState.data ? (
@@ -921,57 +992,63 @@ export function App() {
         />
       ) : (
         <>
-          {/* Main Tool Palette */}
-          <Toolbar
-            activeConfig={activeConfig}
-            onSelectTool={(tool) => {
-              setActiveConfig((prev) => ({ ...prev, tool }));
-              if (tool !== 'select') setSelectedAnnotation(null);
-            }}
-            onOpenSignatureModal={() => setIsSignatureModalOpen(true)}
-            onOpenStampModal={() => setIsStampModalOpen(true)}
-            onOpenOcrModal={() => setIsOcrModalOpen(true)}
-            onInsertImage={handleInsertImage}
-          />
+          {/* Main Tool Palette (Hidden in Fullscreen Presentation Mode) */}
+          {!isFullscreen && (
+            <Toolbar
+              activeConfig={activeConfig}
+              onSelectTool={(tool) => {
+                setActiveConfig((prev) => ({ ...prev, tool }));
+                if (tool !== 'select') setSelectedAnnotation(null);
+              }}
+              onOpenSignatureModal={() => setIsSignatureModalOpen(true)}
+              onOpenStampModal={() => setIsStampModalOpen(true)}
+              onOpenOcrModal={() => setIsOcrModalOpen(true)}
+              onInsertImage={handleInsertImage}
+            />
+          )}
 
-          {/* Dynamic Property Inspector */}
-          <PropertyInspector
-            activeConfig={activeConfig}
-            selectedAnnotation={selectedAnnotation}
-            onUpdateConfig={(partial) => setActiveConfig((prev) => ({ ...prev, ...partial }))}
-            onUpdateSelectedAnnotation={(partial) => {
-              if (selectedAnnotation) {
-                handleUpdateAnnotation(selectedAnnotation.pageIndex, {
-                  ...selectedAnnotation,
-                  ...partial,
-                } as Annotation);
-              }
-            }}
-            onDeleteSelectedAnnotation={handleDeleteSelectedAnnotation}
-            onDuplicateSelectedAnnotation={handleDuplicateSelectedAnnotation}
-            onBringForward={handleBringForward}
-            onSendBackward={handleSendBackward}
-          />
+          {/* Dynamic Property Inspector (Hidden in Fullscreen Presentation Mode) */}
+          {!isFullscreen && (
+            <PropertyInspector
+              activeConfig={activeConfig}
+              selectedAnnotation={selectedAnnotation}
+              onUpdateConfig={(partial) => setActiveConfig((prev) => ({ ...prev, ...partial }))}
+              onUpdateSelectedAnnotation={(partial) => {
+                if (selectedAnnotation) {
+                  handleUpdateAnnotation(selectedAnnotation.pageIndex, {
+                    ...selectedAnnotation,
+                    ...partial,
+                  } as Annotation);
+                }
+              }}
+              onDeleteSelectedAnnotation={handleDeleteSelectedAnnotation}
+              onDuplicateSelectedAnnotation={handleDuplicateSelectedAnnotation}
+              onBringForward={handleBringForward}
+              onSendBackward={handleSendBackward}
+            />
+          )}
 
           {/* Search Bar Overlay */}
-          <SearchBar
-            isOpen={isSearchOpen}
-            onClose={() => setIsSearchOpen(false)}
-            docState={docState}
-            onMatchesFound={(matches, initialActive) => {
-              setSearchMatches(matches);
-              setActiveMatchIndex(initialActive);
-              if (matches.length > 0 && matches[0]) {
-                setCurrentPageIndex(matches[0].pageIndex);
-              }
-            }}
-            onActiveMatchChange={handleActiveMatchChange}
-            activeMatchIndex={activeMatchIndex}
-          />
+          {!isFullscreen && (
+            <SearchBar
+              isOpen={isSearchOpen}
+              onClose={() => setIsSearchOpen(false)}
+              docState={docState}
+              onMatchesFound={(matches, initialActive) => {
+                setSearchMatches(matches);
+                setActiveMatchIndex(initialActive);
+                if (matches.length > 0 && matches[0]) {
+                  setCurrentPageIndex(matches[0].pageIndex);
+                }
+              }}
+              onActiveMatchChange={handleActiveMatchChange}
+              activeMatchIndex={activeMatchIndex}
+            />
+          )}
 
           {/* Central Workspace Area (Sidebar + Canvas Viewer) */}
           <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
-            {sidebarOpen && (
+            {sidebarOpen && !isFullscreen && (
               <ThumbnailSidebar
                 docState={docState}
                 currentPageIndex={currentPageIndex}
@@ -1015,7 +1092,87 @@ export function App() {
               activeMatchIndex={activeMatchIndex}
               onZoomChange={setZoom}
             />
+
+            {/* Floating Presentation Pill in Fullscreen Mode */}
+            {isFullscreen && (
+              <div
+                className="animate-fade-in"
+                style={{
+                  position: 'fixed',
+                  bottom: '24px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: 'rgba(15, 23, 42, 0.88)',
+                  backdropFilter: 'blur(16px)',
+                  WebkitBackdropFilter: 'blur(16px)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: 'var(--radius-full)',
+                  padding: '6px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  boxShadow: '0 16px 36px -6px rgba(0, 0, 0, 0.6)',
+                  zIndex: 2000,
+                }}
+              >
+                <button
+                  onClick={() => handlePageNumberJump(Math.max(1, currentDisplayPageNumber - 1))}
+                  disabled={currentDisplayPageNumber <= 1}
+                  className="btn-icon"
+                  style={{ width: '28px', height: '28px', color: '#ffffff' }}
+                  data-tooltip="Önceki Sayfa"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#f8fafc', fontFamily: 'JetBrains Mono, monospace' }}>
+                  {currentDisplayPageNumber} / {activePages.length}
+                </span>
+
+                <button
+                  onClick={() => handlePageNumberJump(Math.min(activePages.length, currentDisplayPageNumber + 1))}
+                  disabled={currentDisplayPageNumber >= activePages.length}
+                  className="btn-icon"
+                  style={{ width: '28px', height: '28px', color: '#ffffff' }}
+                  data-tooltip="Sonraki Sayfa"
+                >
+                  <ChevronRight size={16} />
+                </button>
+
+                <div style={{ height: '14px', width: '1px', background: 'rgba(255, 255, 255, 0.2)' }} />
+
+                <button
+                  onClick={() => setIsFullscreen(false)}
+                  className="btn-ghost"
+                  style={{ fontSize: '11px', padding: '3px 10px', color: '#f8fafc', gap: '5px' }}
+                >
+                  <Minimize2 size={13} />
+                  <span>Çıkış (Esc)</span>
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* Desktop Status Bar */}
+          {!isFullscreen && (
+            <Suspense fallback={null}>
+              <StatusBar
+                currentPage={currentDisplayPageNumber}
+                totalPages={activePages.length}
+                pageWidth={currentActualPage?.width}
+                pageHeight={currentActualPage?.height}
+                activeTool={activeConfig.tool}
+                isDirty={isDirty}
+                zoom={zoom}
+                onZoomChange={setZoom}
+                onFitPage={handleFitPage}
+                onFitWidth={handleFitWidth}
+                onOpenProperties={() => setIsDocPropertiesOpen(true)}
+                onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
+                isFullscreen={isFullscreen}
+              />
+            </Suspense>
+          )}
         </>
       )}
 
@@ -1064,6 +1221,7 @@ export function App() {
               const buffer = mergedBytes.buffer.slice(mergedBytes.byteOffset, mergedBytes.byteOffset + mergedBytes.byteLength);
               await parseAndSetPdf(buffer as ArrayBuffer, filename, mergedBytes.byteLength);
             }}
+            onShowToast={showToast}
           />
         )}
 
@@ -1072,6 +1230,7 @@ export function App() {
             isOpen={isSplitModalOpen}
             onClose={() => setIsSplitModalOpen(false)}
             docState={docState}
+            onShowToast={showToast}
           />
         )}
 
@@ -1102,6 +1261,7 @@ export function App() {
             pageNumber={currentActualPage?.originalPageNumber || 1}
             pageIndex={currentActualPage?.pageIndex ?? 0}
             onApplyOcrAnnotations={handleApplyOcrAnnotations}
+            onShowToast={showToast}
           />
         )}
 
@@ -1123,6 +1283,7 @@ export function App() {
             onClose={() => setIsExportImageModalOpen(false)}
             docState={docState}
             currentPageNumber={currentDisplayPageNumber}
+            onShowToast={showToast}
           />
         )}
 
@@ -1131,6 +1292,7 @@ export function App() {
             isOpen={isExportOfficeModalOpen}
             onClose={() => setIsExportOfficeModalOpen(false)}
             docState={docState}
+            onShowToast={showToast}
           />
         )}
 
@@ -1139,6 +1301,7 @@ export function App() {
             isOpen={isSecurityModalOpen}
             onClose={() => setIsSecurityModalOpen(false)}
             docState={docState}
+            onShowToast={showToast}
           />
         )}
 
@@ -1147,6 +1310,7 @@ export function App() {
             isOpen={isCompressModalOpen}
             onClose={() => setIsCompressModalOpen(false)}
             docState={docState}
+            onShowToast={showToast}
           />
         )}
 
@@ -1164,6 +1328,60 @@ export function App() {
             settings={settings}
             onSaveSettings={handleSaveSettings}
             onClearRecentFiles={handleClearRecentFiles}
+          />
+        )}
+
+        {isDocPropertiesOpen && (
+          <DocPropertiesModal
+            isOpen={isDocPropertiesOpen}
+            onClose={() => setIsDocPropertiesOpen(false)}
+            docState={docState}
+            onUpdatePdfData={async (newData) => {
+              const buffer = newData.buffer.slice(newData.byteOffset, newData.byteOffset + newData.byteLength);
+              await parseAndSetPdf(buffer as ArrayBuffer, docState.filename || 'Belge.pdf', newData.byteLength);
+              setIsDirty(true);
+            }}
+            onShowToast={showToast}
+          />
+        )}
+
+        {isCommandPaletteOpen && (
+          <CommandPalette
+            isOpen={isCommandPaletteOpen}
+            onClose={() => setIsCommandPaletteOpen(false)}
+            onOpenNativePdf={handleOpenNativePdf}
+            onSavePdf={handleSavePdf}
+            onSaveAsPdf={handleSaveAsPdf}
+            onPrint={handlePrint}
+            onOpenProperties={() => {
+              if (docState.data) setIsDocPropertiesOpen(true);
+              else showToast('Önce bir PDF belgesi açmalısınız.', 'info');
+            }}
+            onSelectTool={(tool) => {
+              setActiveConfig((prev) => ({ ...prev, tool }));
+              if (tool !== 'select') setSelectedAnnotation(null);
+            }}
+            onOpenSignatureModal={() => setIsSignatureModalOpen(true)}
+            onOpenStampModal={() => setIsStampModalOpen(true)}
+            onOpenOcrModal={() => setIsOcrModalOpen(true)}
+            onOpenMergeModal={() => setIsMergeModalOpen(true)}
+            onOpenSplitModal={() => setIsSplitModalOpen(true)}
+            onOpenCompareModal={() => setIsCompareModalOpen(true)}
+            onOpenWatermarkModal={() => setIsWatermarkModalOpen(true)}
+            onOpenPageNumberingModal={() => setIsPageNumberingModalOpen(true)}
+            onOpenExportOfficeModal={() => setIsExportOfficeModalOpen(true)}
+            onOpenExportImageModal={() => setIsExportImageModalOpen(true)}
+            onOpenCompressModal={() => setIsCompressModalOpen(true)}
+            onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
+            onOpenOrganizeModal={() => setIsOrganizeModalOpen(true)}
+            onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+            onAddBlankPage={handleAddBlankPage}
+            onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
+            onFitPage={handleFitPage}
+            onFitWidth={handleFitWidth}
+            onToggleSearch={() => setIsSearchOpen((prev) => !prev)}
+            onToggleTheme={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+            onReaderFilterChange={setReaderFilter}
           />
         )}
       </Suspense>

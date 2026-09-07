@@ -31,6 +31,7 @@
   - [5. Çok Formatlı Ofis Dışa Aktarım Merkezi](#5-çok-formatlı-ofis-dışa-aktarım-merkezi)
   - [6. Çift PDF Yan Yana Karşılaştırma (Side-by-Side Diff)](#6-çift-pdf-yan-yana-karşılaştırma-side-by-side-diff)
   - [7. Boyut Küçültme (Compress) & Hassas Veri Karartma (Redact)](#7-boyut-küçültme-compress--hassas-veri-karartma-redact)
+  - [8. Komut Paleti, Belge Özellikleri, Durum Çubuğu & Sunum Modu](#8-komut-paleti-belge-özellikleri-durum-çubuğu--sunum-modu)
 - [🏗️ Sistem Mimarisi & Veri Akışı](#️-sistem-mimarisi--veri-akışı)
 - [⚡ Performans & Kod Bölümleme (Code Splitting)](#-performans--kod-bölümleme-code-splitting)
 - [⌨️ Klavye Kısayolları](#️-klavye-kısayolları)
@@ -91,6 +92,13 @@
 ### 7. Boyut Küçültme (Compress) & Hassas Veri Karartma (Redact)
 - **PDF Sıkıştırma:** Düşük, Orta ve Yüksek sıkıştırma profilleriyle dosya boyutunu %80'e varan oranlarda küçültün.
 - **Kalıcı Karartma (Redaction):** TC Kimlik, IBAN, telefon gibi hassas kişisel verileri kalıcı siyah/beyaz bloklarla maskeleyip dışa aktarın.
+
+### 8. Komut Paleti, Belge Özellikleri, Durum Çubuğu & Sunum Modu
+- **Raycast / Spotlight Hızlı Komut Paleti (`Ctrl+K`):** Menüler arasında kaybolmadan klavyeden arama yapın; tüm araçlar, dışa aktarım seçenekleri ve görünüm filtrelerine anında erişin.
+- **Belge Özellikleri & Metaveri Düzenleyici (`Ctrl+D`):** PDF versiyonu, kağıt ebatları, üretici motor gibi teknik detayları inceleyin; Başlık, Yazar, Konu ve Anahtar Kelimeler gibi PDF metaverilerini doğrudan düzenleyip kaydedin.
+- **Modern Alt Durum Çubuğu (Status Bar):** Aktif araç rozeti, sayfa numarası, milimetrik kağıt formatı (`A4 210 × 297 mm`), kayıt durumu (`Kaydedilmemiş` / `Kaydedildi`) ve hızlı yakınlaştırma ön ayarlarını alt bantta şık bir şekilde sunar.
+- **Dikkat Dağıtmayan Tam Ekran Sunum Modu (`F11`):** Başlık çubuğu ve menüleri gizleyerek belgeyi odak noktası haline getirir; yüzen minimal gezinme kapsülü ile slayt gibi sunum yapmanızı sağlar.
+- **Glassmorphic Bildirim Sistemi (Toast):** Klasik tarayıcı uyarı pencereleri yerine modern, animasyonlu ve bilgilendirici durum bildirimleri.
 
 ---
 
@@ -166,6 +174,12 @@ Vite 8 ve React 19 mimarisi ile ağır modüller başlangıç paketinden ayrılm
 | <kbd>E</kbd> | **Doğrudan PDF Metin Düzenleme** Aracı |
 | <kbd>P</kbd> | **Serbest Çizim Kalemi** |
 | <kbd>T</kbd> | **Yeni Metin Kutusu Ekle** |
+| <kbd>Ctrl</kbd> + <kbd>K</kbd> | **Hızlı Komut Paleti (Spotlight Search)** |
+| <kbd>Ctrl</kbd> + <kbd>D</kbd> | **Belge Özellikleri & Metaveri Bilgisi / Düzenleyici** |
+| <kbd>F11</kbd> | **Tam Ekran Sunum Modu** (Presentation Mode) |
+| <kbd>Ctrl</kbd> + <kbd>0</kbd> | **Sayfayı Ekrana Sığdır** (Fit to Page) |
+| <kbd>Ctrl</kbd> + <kbd>1</kbd> | **%100 Orijinal Boyut** (Actual Size) |
+| <kbd>Esc</kbd> | **Tam Ekrandan Çık / Açık Pencereleri Kapat** |
 | <kbd>Delete</kbd> / <kbd>Backspace</kbd> | **Seçili Çizim / Şekil / Damgayı Sil** |
 
 ---
