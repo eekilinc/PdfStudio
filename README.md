@@ -100,26 +100,26 @@ PDF Studio Pro, yüksek performans ve güvenlik için ayrık sorumluluk ilkesine
 
 ```mermaid
 graph TD
-    subgraph Native Desktop Layer [Tauri 2.0 Rust Backend]
-        FS[Yerel Dosya Sistemi I/O]
-        NativeDialog[Windows Dialog API]
-        CLI[Arg & File Association]
+    subgraph NativeLayer["Native Desktop Layer (Tauri 2.0 Rust Backend)"]
+        FS["Yerel Dosya Sistemi I/O"]
+        NativeDialog["Windows Dialog API"]
+        CLI["Arg & File Association"]
     end
 
-    subgraph Frontend Core [React 19 + TypeScript + Vite]
-        App[App.tsx State & Undo/Redo]
-        LazyModals[Code-Split Modals - React.lazy]
-        Viewer[PDFViewer.tsx]
+    subgraph FrontendCore["Frontend Core (React 19 + TypeScript + Vite)"]
+        App["App.tsx State & Undo/Redo"]
+        LazyModals["Code-Split Modals (React.lazy)"]
+        Viewer["PDFViewer.tsx"]
     end
 
-    subgraph Dual-Canvas Engine
-        BGCanvas[PDF.js Render Canvas - Background DPI]
-        OverlayCanvas[Interactive Live Overlay Canvas - 60 FPS]
+    subgraph DualCanvas["Dual-Canvas Engine"]
+        BGCanvas["PDF.js Render Canvas (Background DPI)"]
+        OverlayCanvas["Interactive Live Overlay Canvas (60 FPS)"]
     end
 
-    subgraph PDF Generation & Security
-        PDFLib[pdf-lib Vector Serializer]
-        EncryptEngine[@pdfsmaller/pdf-encrypt AES-256 Engine]
+    subgraph PDFSecurity["PDF Generation & Security"]
+        PDFLib["pdf-lib Vector Serializer"]
+        EncryptEngine["@pdfsmaller/pdf-encrypt AES-256 Engine"]
     end
 
     CLI --> App
