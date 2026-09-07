@@ -339,7 +339,7 @@ const PageItem: React.FC<PageItemProps> = ({
       const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
       const fg = lum < 0.5 ? '#ffffff' : '#0f172a';
       return { bg, fg };
-    } catch (_) {
+    } catch {
       return { bg: '#ffffff', fg: '#0f172a' };
     }
   };
@@ -384,6 +384,7 @@ const PageItem: React.FC<PageItemProps> = ({
   // 1. Render PDF background page or clean blank page
   useEffect(() => {
     let isCancelled = false;
+    let activeTask: any = null;
 
     const renderPdfPage = async () => {
       if (!isVisible || !bgCanvasRef.current) return;
@@ -427,7 +428,9 @@ const PageItem: React.FC<PageItemProps> = ({
         if (renderTaskRef.current) {
           try {
             renderTaskRef.current.cancel();
-          } catch (_) {}
+          } catch {
+            // Ignore cancel error
+          }
         }
 
         const task = pdfPage.render({
@@ -435,6 +438,9 @@ const PageItem: React.FC<PageItemProps> = ({
           viewport: viewport,
           canvas: canvas,
         } as any);
+
+        activeTask = task;
+        renderTaskRef.current = task;
 
         await task.promise;
 
@@ -460,7 +466,7 @@ const PageItem: React.FC<PageItemProps> = ({
             }
             hasDrawnContent = nonWhitePixels >= 8;
           }
-        } catch (_) {
+        } catch {
           hasDrawnContent = true;
         }
 
@@ -513,13 +519,15 @@ const PageItem: React.FC<PageItemProps> = ({
 
     return () => {
       isCancelled = true;
-      if (renderTaskRef.current) {
+      if (activeTask) {
         try {
-          renderTaskRef.current.cancel();
-        } catch (_) {}
+          activeTask.cancel();
+        } catch {
+          // Ignore
+        }
       }
     };
-  }, [docData, page.originalPageNumber, page.rotation, page.isBlank, zoom, isVisible, pageWidth, pageHeight]);
+  }, [docData, page.originalPageNumber, page.pageIndex, page.rotation, page.isBlank, zoom, isVisible, pageWidth, pageHeight]);
 
   // 2. Render Annotations & LIVE previews on Overlay Canvas
   useEffect(() => {
@@ -870,7 +878,7 @@ const PageItem: React.FC<PageItemProps> = ({
       }
       ctx.restore();
     }
-  }, [annotations, selectedAnnotation, currentShapePreview, isDrawing, drawingPoints, zoom, editingTextId, activeConfig, pageWidth, pageHeight, rawWidth, rawHeight, searchMatches, activeMatchIndex, renderTrigger]);
+  }, [annotations, selectedAnnotation, currentShapePreview, isDrawing, drawingPoints, zoom, editingTextId, activeConfig, pageWidth, pageHeight, rawWidth, rawHeight, searchMatches, activeMatchIndex, renderTrigger, shapeStart, isVisible, page.pageIndex]);
 
   const getPdfCoords = (e: React.MouseEvent<HTMLCanvasElement>): Point => {
     const rect = overlayCanvasRef.current?.getBoundingClientRect();
@@ -975,7 +983,7 @@ const PageItem: React.FC<PageItemProps> = ({
       } else {
         setTranslatedText(selectedText);
       }
-    } catch (_) {
+    } catch {
       setTranslatedText('Çeviri servisine ulaşılamadı.');
     } finally {
       setIsTranslating(false);
@@ -985,7 +993,7 @@ const PageItem: React.FC<PageItemProps> = ({
   // Direct Text Edit click handler
   const handleEditOriginalTextItem = (item: ExtractedPdfTextItem) => {
     const colors = getPixelColorsAt(bgCanvasRef.current, item.x, item.y, pageWidth, pageHeight);
-    const newId = Math.random().toString(36).substring(2, 9);
+    const newId = `edit-${item.id}`;
     const newTextAnn: TextAnnotation = {
       id: newId,
       pageIndex: page.pageIndex,

@@ -139,7 +139,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('open_url', { url });
-    } catch (_) {
+    } catch {
       window.open(url, '_blank');
     }
   };

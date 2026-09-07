@@ -25,9 +25,6 @@ export const ComparePdfModal: React.FC<ComparePdfModalProps> = ({
   const canvasARef = useRef<HTMLCanvasElement>(null);
   const canvasBRef = useRef<HTMLCanvasElement>(null);
   const fileInputBRef = useRef<HTMLInputElement>(null);
-
-  if (!isOpen) return null;
-
   const handleSelectDocB = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -46,7 +43,7 @@ export const ComparePdfModal: React.FC<ComparePdfModalProps> = ({
   useEffect(() => {
     let isCancelled = false;
     const renderA = async () => {
-      if (!primaryDocState.data || !canvasARef.current) return;
+      if (!isOpen || !primaryDocState.data || !canvasARef.current) return;
       try {
         const pdf = await getSharedPdfDoc(primaryDocState.data);
         if (!pdf || isCancelled) return;
@@ -73,7 +70,7 @@ export const ComparePdfModal: React.FC<ComparePdfModalProps> = ({
   useEffect(() => {
     let isCancelled = false;
     const renderB = async () => {
-      if (!docBData || !canvasBRef.current) return;
+      if (!isOpen || !docBData || !canvasBRef.current) return;
       try {
         const pdf = await getSharedPdfDoc(docBData);
         if (!pdf || isCancelled) return;
@@ -104,6 +101,8 @@ export const ComparePdfModal: React.FC<ComparePdfModalProps> = ({
       setPageB(newB);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="modal-backdrop">

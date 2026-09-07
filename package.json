@@ -2,7 +2,7 @@
   "name": "pdfstudio",
   "productName": "PDFStudio",
   "private": true,
-  "version": "0.1.0",
+  "version": "2.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,6 +16,7 @@
     "release": "node scripts/bump-version.js patch"
   },
   "dependencies": {
+    "@pdfsmaller/pdf-encrypt": "^1.2.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.2",
     "@tauri-apps/plugin-fs": "^2.5.1",

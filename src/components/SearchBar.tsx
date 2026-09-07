@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, ChevronUp, ChevronDown, X, Loader2 } from 'lucide-react';
 import { getSharedPdfDoc } from '../utils/pdfInit';
 import type { PDFDocumentState, SearchMatch } from '../types/pdf';
@@ -26,35 +26,12 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   const [matchCase, setMatchCase] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const onMatchesFoundRef = useRef(onMatchesFound);
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 50);
-    } else {
-      setQuery('');
-      setMatches([]);
-      onMatchesFound([], -1);
-    }
-  }, [isOpen]);
+    onMatchesFoundRef.current = onMatchesFound;
+  });
 
-  // Debounced search when query changes
-  useEffect(() => {
-    if (!isOpen || !docState.data) return;
-    const cleanQuery = query.trim();
-
-    if (!cleanQuery) {
-      setMatches([]);
-      onMatchesFound([], -1);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      performSearch(cleanQuery, matchCase);
-    }, 250);
-
-    return () => clearTimeout(timer);
-  }, [query, matchCase, docState.data, isOpen]);
-
-  const performSearch = async (searchTerm: string, isCaseSensitive: boolean) => {
+  const performSearch = useCallback(async (searchTerm: string, isCaseSensitive: boolean) => {
     if (!docState.data) return;
     setIsSearching(true);
 
@@ -113,12 +90,39 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 
       setMatches(results);
       const initialActive = results.length > 0 ? 0 : -1;
-      onMatchesFound(results, initialActive);
+      onMatchesFoundRef.current(results, initialActive);
     } catch (err) {
       console.error('Search error:', err);
     } finally {
       setIsSearching(false);
     }
+  }, [docState.data, docState.pages]);
+
+  useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => inputRef.current?.focus(), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  // Debounced search when query changes
+  useEffect(() => {
+    if (!isOpen || !docState.data) return;
+    const cleanQuery = query.trim();
+    if (!cleanQuery) return;
+
+    const timer = setTimeout(() => {
+      performSearch(cleanQuery, matchCase);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [query, matchCase, docState.data, isOpen, performSearch]);
+
+  const handleClose = () => {
+    setQuery('');
+    setMatches([]);
+    onMatchesFoundRef.current([], -1);
+    onClose();
   };
 
   const handleNextMatch = () => {
@@ -135,7 +139,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
-      onClose();
+      handleClose();
     } else if (e.key === 'Enter') {
       if (e.shiftKey) {
         handlePrevMatch();
@@ -172,7 +176,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         type="text"
         placeholder="PDF içinde ara... (Enter ile sonraki)"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => {
+          const val = e.target.value;
+          setQuery(val);
+          if (!val.trim()) {
+            setMatches([]);
+            onMatchesFoundRef.current([], -1);
+          }
+        }}
         onKeyDown={handleKeyDown}
         style={{
           flex: 1,
@@ -233,7 +244,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       <div style={{ width: '1px', height: '16px', background: 'var(--border-color)' }} />
 
       <button
-        onClick={onClose}
+        onClick={handleClose}
         className="btn-icon"
         style={{ width: '24px', height: '24px' }}
         data-tooltip="Kapat (Esc)"

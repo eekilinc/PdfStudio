@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import { 
   FolderOpen, 
   FilePlus, 
@@ -42,16 +42,14 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
-
-  useEffect(() => {
+  const [recentFiles, setRecentFiles] = useState<RecentFile[]>(() => {
     try {
       const stored = localStorage.getItem('pdfstudio_recent_files');
-      if (stored) {
-        setRecentFiles(JSON.parse(stored));
-      }
-    } catch (_) {}
-  }, []);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
 
   const handleClearRecent = (e: React.MouseEvent) => {
     e.stopPropagation();

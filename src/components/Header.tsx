@@ -119,14 +119,15 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pageInput, setPageInput] = useState(String(currentPageNumber || 1));
+  const [prevPageNumber, setPrevPageNumber] = useState(currentPageNumber);
+  if (currentPageNumber !== prevPageNumber) {
+    setPrevPageNumber(currentPageNumber);
+    setPageInput(String(currentPageNumber || 1));
+  }
   const [toolsDropdownOpen, setToolsDropdownOpen] = useState(false);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
   const filterMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setPageInput(String(currentPageNumber || 1));
-  }, [currentPageNumber]);
 
   // Click outside to close dropdowns
   useEffect(() => {

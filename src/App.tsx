@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import type { 
   PDFDocumentState, 
   ActiveToolConfig, 
@@ -19,23 +19,25 @@ import { PropertyInspector } from './components/PropertyInspector';
 import { ThumbnailSidebar } from './components/ThumbnailSidebar';
 import { PDFViewer } from './components/PDFViewer';
 import { WelcomeScreen } from './components/WelcomeScreen';
-
-import { SignatureModal } from './components/SignatureModal';
-import { StampModal } from './components/StampModal';
-import { PageOrganizeModal } from './components/PageOrganizeModal';
-import { MergePdfModal } from './components/MergePdfModal';
-import { OcrModal } from './components/OcrModal';
-import { AboutModal } from './components/AboutModal';
 import { SearchBar } from './components/SearchBar';
-import { WatermarkModal } from './components/WatermarkModal';
-import { ExportImageModal } from './components/ExportImageModal';
-import { ExportOfficeModal } from './components/ExportOfficeModal';
-import { SecurityModal } from './components/SecurityModal';
-import { CompressModal } from './components/CompressModal';
-import { SplitPdfModal } from './components/SplitPdfModal';
-import { PageNumberingModal } from './components/PageNumberingModal';
-import { ComparePdfModal } from './components/ComparePdfModal';
-import { SettingsModal } from './components/SettingsModal';
+
+// Lazy-loaded modals to optimize initial bundle size & load on demand
+const SignatureModal = lazy(() => import('./components/SignatureModal').then(m => ({ default: m.SignatureModal })));
+const StampModal = lazy(() => import('./components/StampModal').then(m => ({ default: m.StampModal })));
+const PageOrganizeModal = lazy(() => import('./components/PageOrganizeModal').then(m => ({ default: m.PageOrganizeModal })));
+const MergePdfModal = lazy(() => import('./components/MergePdfModal').then(m => ({ default: m.MergePdfModal })));
+const OcrModal = lazy(() => import('./components/OcrModal').then(m => ({ default: m.OcrModal })));
+const AboutModal = lazy(() => import('./components/AboutModal').then(m => ({ default: m.AboutModal })));
+const WatermarkModal = lazy(() => import('./components/WatermarkModal').then(m => ({ default: m.WatermarkModal })));
+const ExportImageModal = lazy(() => import('./components/ExportImageModal').then(m => ({ default: m.ExportImageModal })));
+const ExportOfficeModal = lazy(() => import('./components/ExportOfficeModal').then(m => ({ default: m.ExportOfficeModal })));
+const SecurityModal = lazy(() => import('./components/SecurityModal').then(m => ({ default: m.SecurityModal })));
+const CompressModal = lazy(() => import('./components/CompressModal').then(m => ({ default: m.CompressModal })));
+const SplitPdfModal = lazy(() => import('./components/SplitPdfModal').then(m => ({ default: m.SplitPdfModal })));
+const PageNumberingModal = lazy(() => import('./components/PageNumberingModal').then(m => ({ default: m.PageNumberingModal })));
+const ComparePdfModal = lazy(() => import('./components/ComparePdfModal').then(m => ({ default: m.ComparePdfModal })));
+const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
+
 import { loadSettings, saveSettings } from './types/settings';
 import type { AppSettings } from './types/settings';
 
@@ -154,42 +156,10 @@ export function App() {
     try {
       localStorage.removeItem('pdfstudio_recent_files');
       showToast('Son açılan dosyalar geçmişi temizlendi.', 'info');
-    } catch (_) {}
+    } catch {
+      // Ignore storage errors
+    }
   };
-
-  // Sync theme attribute to HTML tag
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
-
-  // Load startup file passed via CLI / "Open With" or fallback to sample PDF
-  useEffect(() => {
-    loadStartupFileOrSample();
-  }, []);
-
-  // Native window Drag & Drop listener for PDFs
-  useEffect(() => {
-    const handleDragOver = (e: DragEvent) => {
-      e.preventDefault();
-    };
-
-    const handleDrop = (e: DragEvent) => {
-      e.preventDefault();
-      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
-        const file = e.dataTransfer.files[0];
-        if (file.name.toLowerCase().endsWith('.pdf')) {
-          handleOpenPdfFile(file);
-        }
-      }
-    };
-
-    window.addEventListener('dragover', handleDragOver);
-    window.addEventListener('drop', handleDrop);
-    return () => {
-      window.removeEventListener('dragover', handleDragOver);
-      window.removeEventListener('drop', handleDrop);
-    };
-  }, []);
 
   const addToRecentFiles = (name: string, path: string) => {
     try {
@@ -199,46 +169,10 @@ export function App() {
       recents.unshift({ name, path, lastOpened: Date.now() });
       if (recents.length > 6) recents = recents.slice(0, 6);
       localStorage.setItem('pdfstudio_recent_files', JSON.stringify(recents));
-    } catch (_) {}
-  };
-
-  const loadStartupFileOrSample = async () => {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const startupPath = await invoke<string | null>('get_startup_file');
-      if (startupPath) {
-        const fileBytes = await invoke<number[]>('read_pdf_file', { path: startupPath });
-        const buffer = new Uint8Array(fileBytes).buffer;
-        const filename = startupPath.split(/[\\/]/).pop() || 'Belge.pdf';
-        setCurrentFilePath(startupPath);
-        addToRecentFiles(filename, startupPath);
-        await parseAndSetPdf(buffer, filename, fileBytes.length);
-        return;
-      }
-    } catch (_) {
-      // In browser or standalone mode without CLI args
-    }
-
-    // Check if this is the first launch ever
-    const hasLaunchedBefore = localStorage.getItem('pdfstudio_has_launched');
-    if (!hasLaunchedBefore) {
-      localStorage.setItem('pdfstudio_has_launched', 'true');
-      loadSampleDocument();
+    } catch {
+      // Ignore storage errors
     }
   };
-
-  // Helper to commit state into Undo/Redo stack
-  const updateDocWithHistory = useCallback((updater: (prev: PDFDocumentState) => PDFDocumentState) => {
-    setDocState((prev) => {
-      const nextState = updater(prev);
-      setHistory((prevHist) => {
-        const sliced = prevHist.slice(0, historyIndex + 1);
-        return [...sliced, nextState];
-      });
-      setHistoryIndex((prevIdx) => prevIdx + 1);
-      return nextState;
-    });
-  }, [historyIndex]);
 
   // Helper to parse PDF ArrayBuffer and build page states instantaneously
   const parseAndSetPdf = async (arrayBuffer: ArrayBuffer, filename: string, fileSize: number) => {
@@ -303,6 +237,92 @@ export function App() {
     }
   };
 
+  const handleOpenPdfFile = async (file: File) => {
+    const arrayBuffer = await file.arrayBuffer();
+    const filePath = (file as any).path || null;
+    setCurrentFilePath(filePath);
+    if (filePath) {
+      addToRecentFiles(file.name, filePath);
+    }
+    await parseAndSetPdf(arrayBuffer, file.name, file.size);
+    showToast(`Açıldı: ${file.name}`, 'info');
+  };
+
+  const loadStartupFileOrSample = async () => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const startupPath = await invoke<string | null>('get_startup_file');
+      if (startupPath) {
+        const fileBytes = await invoke<number[]>('read_pdf_file', { path: startupPath });
+        const buffer = new Uint8Array(fileBytes).buffer;
+        const filename = startupPath.split(/[\\/]/).pop() || 'Belge.pdf';
+        setCurrentFilePath(startupPath);
+        addToRecentFiles(filename, startupPath);
+        await parseAndSetPdf(buffer, filename, fileBytes.length);
+        return;
+      }
+    } catch {
+      // In browser or standalone mode without CLI args
+    }
+
+    // Check if this is the first launch ever
+    const hasLaunchedBefore = localStorage.getItem('pdfstudio_has_launched');
+    if (!hasLaunchedBefore) {
+      localStorage.setItem('pdfstudio_has_launched', 'true');
+      loadSampleDocument();
+    }
+  };
+
+  // Sync theme attribute to HTML tag
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  // Load startup file passed via CLI / "Open With" or fallback to sample PDF
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadStartupFileOrSample();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Native window Drag & Drop listener for PDFs
+  useEffect(() => {
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+    };
+
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+        const file = e.dataTransfer.files[0];
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+          handleOpenPdfFile(file);
+        }
+      }
+    };
+
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('drop', handleDrop);
+    return () => {
+      window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('drop', handleDrop);
+    };
+  }, []);
+
+  // Helper to commit state into Undo/Redo stack
+  const updateDocWithHistory = useCallback((updater: (prev: PDFDocumentState) => PDFDocumentState) => {
+    setDocState((prev) => {
+      const nextState = updater(prev);
+      setHistory((prevHist) => {
+        const sliced = prevHist.slice(0, historyIndex + 1);
+        return [...sliced, nextState];
+      });
+      setHistoryIndex((prevIdx) => prevIdx + 1);
+      return nextState;
+    });
+  }, [historyIndex]);
+
   const handleCreateBlankPdf = async () => {
     try {
       const blankBytes = await createBlankPdf();
@@ -347,17 +367,6 @@ export function App() {
     setHistoryIndex(-1);
     setSearchMatches([]);
     setActiveMatchIndex(-1);
-  };
-
-  const handleOpenPdfFile = async (file: File) => {
-    const arrayBuffer = await file.arrayBuffer();
-    const filePath = (file as any).path || null;
-    setCurrentFilePath(filePath);
-    if (filePath) {
-      addToRecentFiles(file.name, filePath);
-    }
-    await parseAndSetPdf(arrayBuffer, file.name, file.size);
-    showToast(`Açıldı: ${file.name}`, 'info');
   };
 
   const handleOpenNativePdf = async () => {
@@ -453,7 +462,7 @@ export function App() {
         } else {
           return; // Cancelled
         }
-      } catch (_) {
+      } catch {
         // Fallback for browser download mode
         const blob = new Blob([exportedBytes as any], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
@@ -751,36 +760,60 @@ export function App() {
     }
   };
 
+  // Keep actions ref updated for window keyboard listener without rebinding
+  const actionsRef = useRef({
+    handleUndo,
+    handleRedo,
+    handleSavePdf,
+    handleSaveAsPdf,
+    handleOpenNativePdf,
+    handleDeleteSelectedAnnotation,
+    selectedAnnotation,
+  });
+
+  useEffect(() => {
+    actionsRef.current = {
+      handleUndo,
+      handleRedo,
+      handleSavePdf,
+      handleSaveAsPdf,
+      handleOpenNativePdf,
+      handleDeleteSelectedAnnotation,
+      selectedAnnotation,
+    };
+  });
+
   // Keyboard Shortcuts Listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const act = actionsRef.current;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         setIsSearchOpen((prev) => !prev);
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
         e.preventDefault();
-        handleUndo();
+        act.handleUndo();
       }
       if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
         e.preventDefault();
-        handleRedo();
+        act.handleRedo();
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (e.shiftKey) {
-          handleSaveAsPdf();
+          act.handleSaveAsPdf();
         } else {
-          handleSavePdf();
+          act.handleSavePdf();
         }
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
         e.preventDefault();
-        handleOpenNativePdf();
+        act.handleOpenNativePdf();
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedAnnotation && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && act.selectedAnnotation && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
         e.preventDefault();
-        handleDeleteSelectedAnnotation();
+        act.handleDeleteSelectedAnnotation();
       }
       if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
         if (e.key.toLowerCase() === 'v') setActiveConfig((prev) => ({ ...prev, tool: 'select' }));
@@ -793,7 +826,7 @@ export function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [historyIndex, history, selectedAnnotation, docState, currentFilePath]);
+  }, []);
 
   const activePages = docState.pageOrder
     .map(idx => docState.pages.find(p => p.pageIndex === idx))
@@ -986,122 +1019,154 @@ export function App() {
         </>
       )}
 
-      {/* 6. Modals */}
-      <SignatureModal
-        isOpen={isSignatureModalOpen}
-        onClose={() => setIsSignatureModalOpen(false)}
-        onApplySignature={(dataUrl) => {
-          setPendingSignatureData(dataUrl);
-          setActiveConfig((prev) => ({ ...prev, tool: 'signature' }));
-        }}
-      />
+      {/* 6. Modals (Lazy Loaded on Demand) */}
+      <Suspense fallback={null}>
+        {isSignatureModalOpen && (
+          <SignatureModal
+            isOpen={isSignatureModalOpen}
+            onClose={() => setIsSignatureModalOpen(false)}
+            onApplySignature={(dataUrl) => {
+              setPendingSignatureData(dataUrl);
+              setActiveConfig((prev) => ({ ...prev, tool: 'signature' }));
+            }}
+          />
+        )}
 
-      <StampModal
-        isOpen={isStampModalOpen}
-        onClose={() => setIsStampModalOpen(false)}
-        onApplyStamp={(stamp) => {
-          setPendingStampData(stamp);
-          setActiveConfig((prev) => ({ ...prev, tool: 'stamp' }));
-        }}
-      />
+        {isStampModalOpen && (
+          <StampModal
+            isOpen={isStampModalOpen}
+            onClose={() => setIsStampModalOpen(false)}
+            onApplyStamp={(stamp) => {
+              setPendingStampData(stamp);
+              setActiveConfig((prev) => ({ ...prev, tool: 'stamp' }));
+            }}
+          />
+        )}
 
-      <PageOrganizeModal
-        isOpen={isOrganizeModalOpen}
-        onClose={() => setIsOrganizeModalOpen(false)}
-        docState={docState}
-        onRotatePage={handleRotatePage}
-        onRotateAllPages={handleRotateAllPages}
-        onDuplicatePage={handleDuplicatePage}
-        onDeletePage={handleDeletePage}
-        onMovePage={handleMovePage}
-      />
+        {isOrganizeModalOpen && (
+          <PageOrganizeModal
+            isOpen={isOrganizeModalOpen}
+            onClose={() => setIsOrganizeModalOpen(false)}
+            docState={docState}
+            onRotatePage={handleRotatePage}
+            onRotateAllPages={handleRotateAllPages}
+            onDuplicatePage={handleDuplicatePage}
+            onDeletePage={handleDeletePage}
+            onMovePage={handleMovePage}
+          />
+        )}
 
-      <MergePdfModal
-        isOpen={isMergeModalOpen}
-        onClose={() => setIsMergeModalOpen(false)}
-        onApplyMerged={async (mergedBytes, filename) => {
-          const buffer = mergedBytes.buffer.slice(mergedBytes.byteOffset, mergedBytes.byteOffset + mergedBytes.byteLength);
-          await parseAndSetPdf(buffer as ArrayBuffer, filename, mergedBytes.byteLength);
-        }}
-      />
+        {isMergeModalOpen && (
+          <MergePdfModal
+            isOpen={isMergeModalOpen}
+            onClose={() => setIsMergeModalOpen(false)}
+            onApplyMerged={async (mergedBytes, filename) => {
+              const buffer = mergedBytes.buffer.slice(mergedBytes.byteOffset, mergedBytes.byteOffset + mergedBytes.byteLength);
+              await parseAndSetPdf(buffer as ArrayBuffer, filename, mergedBytes.byteLength);
+            }}
+          />
+        )}
 
-      <SplitPdfModal
-        isOpen={isSplitModalOpen}
-        onClose={() => setIsSplitModalOpen(false)}
-        docState={docState}
-      />
+        {isSplitModalOpen && (
+          <SplitPdfModal
+            isOpen={isSplitModalOpen}
+            onClose={() => setIsSplitModalOpen(false)}
+            docState={docState}
+          />
+        )}
 
-      <PageNumberingModal
-        isOpen={isPageNumberingModalOpen}
-        onClose={() => setIsPageNumberingModalOpen(false)}
-        totalPages={activePages.length}
-        onApplyPageNumbers={handleApplyPageNumbers}
-        pageWidth={currentActualPage?.width}
-        pageHeight={currentActualPage?.height}
-      />
+        {isPageNumberingModalOpen && (
+          <PageNumberingModal
+            isOpen={isPageNumberingModalOpen}
+            onClose={() => setIsPageNumberingModalOpen(false)}
+            totalPages={activePages.length}
+            onApplyPageNumbers={handleApplyPageNumbers}
+            pageWidth={currentActualPage?.width}
+            pageHeight={currentActualPage?.height}
+          />
+        )}
 
-      <ComparePdfModal
-        isOpen={isCompareModalOpen}
-        onClose={() => setIsCompareModalOpen(false)}
-        primaryDocState={docState}
-      />
+        {isCompareModalOpen && (
+          <ComparePdfModal
+            isOpen={isCompareModalOpen}
+            onClose={() => setIsCompareModalOpen(false)}
+            primaryDocState={docState}
+          />
+        )}
 
-      <OcrModal
-        isOpen={isOcrModalOpen}
-        onClose={() => setIsOcrModalOpen(false)}
-        docData={docState.data}
-        pageNumber={currentActualPage?.originalPageNumber || 1}
-        pageIndex={currentActualPage?.pageIndex ?? 0}
-        onApplyOcrAnnotations={handleApplyOcrAnnotations}
-      />
+        {isOcrModalOpen && (
+          <OcrModal
+            isOpen={isOcrModalOpen}
+            onClose={() => setIsOcrModalOpen(false)}
+            docData={docState.data}
+            pageNumber={currentActualPage?.originalPageNumber || 1}
+            pageIndex={currentActualPage?.pageIndex ?? 0}
+            onApplyOcrAnnotations={handleApplyOcrAnnotations}
+          />
+        )}
 
-      <WatermarkModal
-        isOpen={isWatermarkModalOpen}
-        onClose={() => setIsWatermarkModalOpen(false)}
-        totalPages={activePages.length}
-        currentPageIndex={currentPageIndex}
-        onApplyWatermark={handleApplyWatermark}
-        pageWidth={currentActualPage?.width}
-        pageHeight={currentActualPage?.height}
-      />
+        {isWatermarkModalOpen && (
+          <WatermarkModal
+            isOpen={isWatermarkModalOpen}
+            onClose={() => setIsWatermarkModalOpen(false)}
+            totalPages={activePages.length}
+            currentPageIndex={currentPageIndex}
+            onApplyWatermark={handleApplyWatermark}
+            pageWidth={currentActualPage?.width}
+            pageHeight={currentActualPage?.height}
+          />
+        )}
 
-      <ExportImageModal
-        isOpen={isExportImageModalOpen}
-        onClose={() => setIsExportImageModalOpen(false)}
-        docState={docState}
-        currentPageNumber={currentDisplayPageNumber}
-      />
+        {isExportImageModalOpen && (
+          <ExportImageModal
+            isOpen={isExportImageModalOpen}
+            onClose={() => setIsExportImageModalOpen(false)}
+            docState={docState}
+            currentPageNumber={currentDisplayPageNumber}
+          />
+        )}
 
-      <ExportOfficeModal
-        isOpen={isExportOfficeModalOpen}
-        onClose={() => setIsExportOfficeModalOpen(false)}
-        docState={docState}
-      />
+        {isExportOfficeModalOpen && (
+          <ExportOfficeModal
+            isOpen={isExportOfficeModalOpen}
+            onClose={() => setIsExportOfficeModalOpen(false)}
+            docState={docState}
+          />
+        )}
 
-      <SecurityModal
-        isOpen={isSecurityModalOpen}
-        onClose={() => setIsSecurityModalOpen(false)}
-        docState={docState}
-      />
+        {isSecurityModalOpen && (
+          <SecurityModal
+            isOpen={isSecurityModalOpen}
+            onClose={() => setIsSecurityModalOpen(false)}
+            docState={docState}
+          />
+        )}
 
-      <CompressModal
-        isOpen={isCompressModalOpen}
-        onClose={() => setIsCompressModalOpen(false)}
-        docState={docState}
-      />
+        {isCompressModalOpen && (
+          <CompressModal
+            isOpen={isCompressModalOpen}
+            onClose={() => setIsCompressModalOpen(false)}
+            docState={docState}
+          />
+        )}
 
-      <AboutModal
-        isOpen={isAboutModalOpen}
-        onClose={() => setIsAboutModalOpen(false)}
-      />
+        {isAboutModalOpen && (
+          <AboutModal
+            isOpen={isAboutModalOpen}
+            onClose={() => setIsAboutModalOpen(false)}
+          />
+        )}
 
-      <SettingsModal
-        isOpen={isSettingsModalOpen}
-        onClose={() => setIsSettingsModalOpen(false)}
-        settings={settings}
-        onSaveSettings={handleSaveSettings}
-        onClearRecentFiles={handleClearRecentFiles}
-      />
+        {isSettingsModalOpen && (
+          <SettingsModal
+            isOpen={isSettingsModalOpen}
+            onClose={() => setIsSettingsModalOpen(false)}
+            settings={settings}
+            onSaveSettings={handleSaveSettings}
+            onClearRecentFiles={handleClearRecentFiles}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

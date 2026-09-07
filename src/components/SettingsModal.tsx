@@ -37,10 +37,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [clearedRecentSuccess, setClearedRecentSuccess] = useState(false);
 
-  // Sync state if settings prop changes
-  React.useEffect(() => {
+  const [prevSettings, setPrevSettings] = useState(settings);
+  if (settings !== prevSettings) {
+    setPrevSettings(settings);
     setCurrent(settings);
-  }, [settings, isOpen]);
+  }
 
   if (!isOpen) return null;
 

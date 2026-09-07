@@ -431,7 +431,9 @@ const ThumbnailCanvas: React.FC<ThumbnailCanvasProps> = ({ docData, pageNumber, 
         if (renderTaskRef.current) {
           try {
             renderTaskRef.current.cancel();
-          } catch (_) {}
+          } catch {
+            // Ignore cancel error
+          }
         }
 
         const task = page.render({
@@ -471,7 +473,9 @@ const ThumbnailCanvas: React.FC<ThumbnailCanvasProps> = ({ docData, pageNumber, 
               ctx.fillText(item.str, ptX, ptY);
             });
           }
-        } catch (_) {}
+        } catch {
+          // Ignore fallback extraction error
+        }
 
         if (!isCancelled) setIsRendered(true);
       } catch (err: any) {
@@ -488,7 +492,9 @@ const ThumbnailCanvas: React.FC<ThumbnailCanvasProps> = ({ docData, pageNumber, 
       if (renderTaskRef.current) {
         try {
           renderTaskRef.current.cancel();
-        } catch (_) {}
+        } catch {
+          // Ignore cancel error
+        }
       }
     };
   }, [docData, pageNumber, rotation, isVisible, isBlank]);

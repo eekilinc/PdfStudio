@@ -403,7 +403,7 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
             setIsExporting(false);
             return;
           }
-        } catch (_) {
+        } catch {
           // Tauri not available or error, fallback to browser download
           const blob = new Blob([outputContent], { type: mimeType });
           triggerDownload(blob, defaultFileName);

@@ -1,104 +1,151 @@
+<div align="center">
+
 # 🚀 PDF Studio Pro
 
 <p align="center">
-  <strong>Yüksek Performanslı, Modern, Ultra Hızlı ve %100 Çevrimdışı Masaüstü PDF Düzenleme & Üretkenlik Paketi</strong>
+  <strong>Ultra Hızlı, Modern, Askeri Düzeyde Güvenli ve %100 Çevrimdışı Masaüstü PDF Düzenleme & Üretkenlik Paketi</strong>
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Platform-Windows%20(x64)-0078D4.svg?logo=windows&logoColor=white" alt="Platform" />
-  <img src="https://img.shields.io/badge/Framework-Tauri%202.0%20(Rust)-FFC135.svg?logo=tauri&logoColor=black" alt="Tauri" />
-  <img src="https://img.shields.io/badge/Frontend-React%2019%20%2B%20TypeScript-61dafb.svg?logo=react&logoColor=black" alt="React" />
-  <img src="https://img.shields.io/badge/Engine-PDF.js%20%2B%20pdf--lib-E44D26.svg?logo=adobeacrobatreader&logoColor=white" alt="PDF.js" />
-  <img src="https://img.shields.io/badge/OCR-Tesseract.js-22c55e.svg" alt="OCR" />
-  <img src="https://img.shields.io/badge/Security-100%25%20Local%20%26%20Private-10b981.svg?logo=shield&logoColor=white" alt="Privacy" />
-  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License" />
-</p>
+[![Platform](https://img.shields.io/badge/Platform-Windows%20x64-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/eekilinc/pdfstudio)
+[![Framework](https://img.shields.io/badge/Tauri_2.0-Rust%20Backend-FFC135?style=for-the-badge&logo=tauri&logoColor=black)](https://tauri.app/)
+[![Frontend](https://img.shields.io/badge/React_19-TypeScript-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![Engine](https://img.shields.io/badge/PDF.js-pdf--lib-E44D26?style=for-the-badge&logo=adobeacrobatreader&logoColor=white)](https://mozilla.github.io/pdf.js/)
+[![Security](https://img.shields.io/badge/Security-AES--256%20%7C%20Local-10B981?style=for-the-badge&logo=shield&logoColor=white)](https://github.com/eekilinc/pdfstudio)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+
+<br/>
+
+> **PDF Studio Pro**, tarayıcı sınırlarını aşan yerel masaüstü performansı, gelişmiş çift katmanlı tuval mimarisi (Dual-Canvas), optik karakter tanıma (OCR), doğrudan PDF metin değiştirme ve gerçek **AES-256** şifreleme desteği sunan yeni nesil bir PDF düzenleyicisidir. Hiçbir veriniz internete gönderilmez; her işlem tamamen bilgisayarınızda gerçekleşir.
+
+</div>
 
 ---
 
-## 🌟 Öne Çıkan Başlıca Özellikler
+## 📑 İçindekiler
 
-### 🎛️ 1. Modern Karşılama & Hızlı Başlangıç Paneli (Welcome Dashboard)
-* **Akıllı Karşılama Ekranı:** Uygulama açıldığında sizi tertemiz ve modern bir başlangıç paneli karşılar.
-* **Merkezi Sürükle & Bırak (Drag & Drop):** PDF belgelerinizi doğrudan panelin üzerine bırakarak veya tek tıkla dosya seçerek açın.
-* **🕒 Son Açılan Belgeler (Recent Files):** Açtığınız belgeler yerel hafızaya kaydedilir; dilediğiniz zaman tek tıkla kaldığınız yerden devam edin.
-* **📄 Yeni Boş Belge Oluşturucu:** Sıfırdan saf beyaz A4 sayfası açıp anında çizim, metin ve tasarım yapmaya başlayın.
-* **✨ Örnek Şablon:** İnteraktif sözleşme şablonunu tek tıkla yükleyerek tüm özellikleri anında deneyin.
-
----
-
-### 💾 2. Profesyonel Kaydetme & Dosya Motoru
-* **💾 Doğrudan Kaydet (`Ctrl + S`):** İndirilenler klasörüne gereksiz kopyalar indirmek yerine, **doğrudan açtığınız dosyanın orijinal konumuna** anında ve sessizce kaydeder.
-* **📄 Farklı Kaydet (`Ctrl + Shift + S`):** Windows yerel dosya seçici penceresi ile istediğiniz klasörü ve yeni dosya adını seçerek kaydedin.
-* **⚡ Canlı Bellek Mimarisi:** Dosyayı diske kaydetseniz bile, açık olan oturumda yaptığınız çizimler ve metinler interaktif nesne olarak korunur; istediğiniz zaman **Silgi (`Eraser`)** ile silebilir veya değiştirebilirsiniz.
-
----
-
-### 📝 3. Doğrudan PDF Metin Düzenleme & OCR
-* **Doğrudan Metin Değiştirme:** PDF üzerindeki orijinal metinleri anında değiştirin, silin, fontunu, kalınlığını ve boyutunu ayarlayın.
-* **Tesseract OCR:** Taranmış kitap veya görsel PDF'leri optik karakter tanıma ile saniyeler içinde düzenlenebilir metne dönüştürün.
-* **Metin Netleştirme Filtresi:** Soluk taranmış kitap ve belgelerdeki metinleri dinamik piksel tespitiyle koyulaştırıp ultra net hale getirir.
-* **Seç & Kopyala & Çevir (`Ctrl+C`):** Metin katmanı üzerinden hızlıca seçim yapın, kopyalayın veya tek tıkla **Türkçe'ye çevirin**.
+- [✨ Öne Çıkan Başlıca Özellikler](#-öne-çıkan-başlıca-özellikler)
+  - [1. Doğrudan PDF Metin Düzenleme & Akıllı OCR](#1-doğrudan-pdf-metin-düzenleme--akıllı-ocr)
+  - [2. Askeri Düzeyde AES-256 Şifreleme & İzin Yönetimi](#2-askeri-düzeyde-aes-256-şifreleme--izin-yönetimi)
+  - [3. Çizim, Vurgulama, Dijital İmza, Damga & Cetvel](#3-çizim-vurgulama-dijital-imza-damga--cetvel)
+  - [4. Gelişmiş Belge & Sayfa Yönetimi (Split & Merge)](#4-gelişmiş-belge--sayfa-yönetimi-split--merge)
+  - [5. Çok Formatlı Ofis Dışa Aktarım Merkezi](#5-çok-formatlı-ofis-dışa-aktarım-merkezi)
+  - [6. Çift PDF Yan Yana Karşılaştırma (Side-by-Side Diff)](#6-çift-pdf-yan-yana-karşılaştırma-side-by-side-diff)
+  - [7. Boyut Küçültme (Compress) & Hassas Veri Karartma (Redact)](#7-boyut-küçültme-compress--hassas-veri-karartma-redact)
+- [🏗️ Sistem Mimarisi & Veri Akışı](#️-sistem-mimarisi--veri-akışı)
+- [⚡ Performans & Kod Bölümleme (Code Splitting)](#-performans--kod-bölümleme-code-splitting)
+- [⌨️ Klavye Kısayolları](#️-klavye-kısayolları)
+- [🛠️ Teknolojik Altyapı](#️-teknolojik-altyapı)
+- [🚀 Geliştirme & Kurulum Rehberi](#-geliştirme--kurulum-rehberi)
+- [🔒 Gizlilik ve Güvenlik Beyannamesi](#-gizlilik-ve-güvenlik-beyannamesi)
+- [📄 Lisans](#-lisans)
 
 ---
 
-### 🎨 4. Çizim, Vurgulama, Şekiller & Saydamlık (Opaklık)
-* **Canlı Çizim & Fosforlu Kalem:** 60 FPS anlık önizleme ile pürüzsüz serbest çizim ve satır vurgulama.
-* **🎨 Dinamik Saydamlık / Opaklık Ayarı (%10 - %100):** Kalem, fosforlu kalem, şekiller ve metinlerin şeffaflığını canlı kaydırıcı ile hassasça ayarlayın.
-* **🧹 Vektörel Silgi (Eraser):** Sayfadaki çizim, şekil ve damgaları tek dokunuşla temizleyin.
-* **Resim & Logo Ekleme:** Bilgisayarınızdan istediğiniz görseli veya şirket logosunu PDF üzerine ekleyip boyutlandırın.
-* **Dijital İmza & Kaşe/Damga:** Çizerek, yazarak veya resim yükleyerek resmi sözleşme onaylama.
-* **Teknik Ölçüm Cetveli (Ruler):** Plan ve mimari çizimler üzerinde iki nokta arasındaki gerçek mesafeyi (`cm` ve `mm`) ölçün.
-* **İnteraktif Onay Kutusu (Checkbox):** Tıklanabilir `☑` / `☐` onay kutuları ekleyin.
+## ✨ Öne Çıkan Başlıca Özellikler
+
+### 1. Doğrudan PDF Metin Düzenleme & Akıllı OCR
+- **Doğrudan Metin Değiştirme (`E` - Edit Text):** PDF üzerindeki mevcut metin bloklarına tıklayın; font ailesi, ağırlığı ve arka plan piksel rengi canlı olarak tespit edilir, metin anında düzenlenebilir hale gelir.
+- **Tesseract.js OCR:** Taranmış evrak, kitap ve sözleşmeleri Türkçe ve İngilizce dil modelleriyle tarayarak saniyeler içinde düzenlenebilir ve aranabilir metne dönüştürün.
+- **Metin Seçimi, Kopyalama & Anında Çeviri:** Belgedeki metin katmanından seçim yapıp tek tıkla panoya kopyalayın veya Türkçe'ye çevirin.
+
+### 2. Askeri Düzeyde AES-256 Şifreleme & İzin Yönetimi
+- **Web Crypto AES-256:** PDF belgelerinizi endüstri standardı **256-bit AES** şifreleme ile koruma altına alın.
+- **Granüler Yetkilendirme:** 
+  - Belge açılış parolası (User Password) belirleme.
+  - İsteğe bağlı yönetici parolası (Owner/Master Password) tanımlama.
+  - Yazdırma (Print), metin/resim kopyalama (Copy) ve düzenleme (Modify) haklarını ayrı ayrı kısıtlama.
+- **Geriye Dönük Uyumluluk:** Eski PDF okuyucular için RC4 128-bit şifreleme profili seçeneği.
+
+### 3. Çizim, Vurgulama, Dijital İmza, Damga & Cetvel
+- **60 FPS Canlı Vektörel Çizim:** Akıcı serbest çizim kalemi (`P`) ve yarı saydam fosforlu kalem.
+- **Dinamik Şeffaflık & Renk Paleti:** Çizim, şekil ve metinlerin opaklığını %10 ile %100 arasında anlık ayarlayın.
+- **Resmi Kaşe & Damgalar:** `ONAYLANDI`, `GİZLİ`, `TASLAK`, `REDDEDİLDİ`, `TAMAMLANDI` gibi hazır veya tarihli özel damgalar basın.
+- **Çizerek veya Resimden İmza:** Farenizle imzanızı çizin veya şeffaf PNG kaşe yükleyip boyutlandırın.
+- **Teknik Ölçüm Cetveli (Ruler):** Plan ve mimari paftalar üzerinde iki nokta arasındaki net mesafeyi (`cm`, `mm`, `inç`) hassas hesaplayın.
+- **Tıklanabilir Onay Kutusu (Checkbox):** Etkileşimli `☑` / `☐` kontrol kutuları yerleştirin.
+
+### 4. Gelişmiş Belge & Sayfa Yönetimi (Split & Merge)
+- **PDF Bölme (Split):**
+  - Sayfa aralığı çıkarma (`1-3, 5, 8-12`).
+  - Her sayfayı ayrı birer PDF yapma.
+  - Tek ve çift sayfaları iki ayrı dosyaya ayırma.
+  - Sayfa bloklarına (örn. 2'şer sayfa) göre otomatik bölme.
+- **PDF Birleştirme (Merge):** Sürükle-bırak ile birden fazla PDF'i dilediğiniz sırada tek belgede toplayın.
+- **Görsel Sayfa Sıralama (Thumbnail Sidebar):** Sayfaları sürükleyip bırakarak taşıyın, 90° döndürün, çoğaltın veya silin.
+- **Sayfa Numaralandırma & Filigran:** Tek tıkla altbilgi/üstbilgi formatlarında sayfa numarası ve yarı saydam filigran ekleyin.
+
+### 5. Çok Formatlı Ofis Dışa Aktarım Merkezi
+| Format | Uzantı | Açıklama |
+|---|---|---|
+| **Microsoft Word** | `.docx / .doc` | Paragraf, başlık ve hizalamaları koruyarak Word belgesine dönüştürür. |
+| **Microsoft Excel** | `.xlsx / .csv` | Tablo ve listeleri satır/sütun tablosu halinde UTF-8 BOM destekli Excel dosyası yapar. |
+| **PowerPoint** | `.pptx / HTML` | Her PDF sayfasını bağımsız bir sunum slaytına dönüştürür. |
+| **Markdown** | `.md` | Dokümantasyon için başlık ve listeleri temiz Markdown formatında dışa aktarır. |
+| **Düz Metin** | `.txt` | Tüm formatlardan arındırılmış temiz UTF-8 saf metin çıktısı verir. |
+| **Web Sayfası** | `.html` | Modern ve bağımsız web sayfası olarak kaydeder. |
+| **Görsel Paketi** | `.png / .jpg` | Sayfaları yüksek çözünürlüklü raster görsel formatında dışa aktarır. |
+
+### 6. Çift PDF Yan Yana Karşılaştırma (Side-by-Side Diff)
+- İki farklı revizyonu veya sözleşmeyi yan yana açarak **eşzamanlı kaydırma (synchronized scroll)** ile sayfa sayfa karşılaştırın.
+
+### 7. Boyut Küçültme (Compress) & Hassas Veri Karartma (Redact)
+- **PDF Sıkıştırma:** Düşük, Orta ve Yüksek sıkıştırma profilleriyle dosya boyutunu %80'e varan oranlarda küçültün.
+- **Kalıcı Karartma (Redaction):** TC Kimlik, IBAN, telefon gibi hassas kişisel verileri kalıcı siyah/beyaz bloklarla maskeleyip dışa aktarın.
 
 ---
 
-### 📤 5. Ofis & Format Dışa Aktarma Merkezi (Export Center)
-* **Microsoft Word (`.docx / .doc`):** Başlıklar, paragraflar, sayfa sonları ve yazı stillerini koruyarak Word formatına dönüştürür.
-* **Microsoft Excel (`.xlsx / .csv`):** Tablo, liste ve sayısal verileri UTF-8 BOM destekli Excel tablosu olarak dışa aktarır.
-* **PowerPoint Sunumu (`.pptx / HTML Slides`):** Her PDF sayfasını bağımsız sunum slaytına dönüştürür.
-* **Düz Metin (`.txt`):** Temiz, sayfa başlıklı saf metin çıktısı verir.
-* **Markdown (`.md`):** Dokümantasyon için başlık ve listeleri Markdown formatında hazırlar.
-* **HTML Sayfası (`.html`):** Şık, modern ve bağımsız web sayfası olarak kaydeder.
+## 🏗️ Sistem Mimarisi & Veri Akışı
+
+PDF Studio Pro, yüksek performans ve güvenlik için ayrık sorumluluk ilkesine (SoC) dayalı modüler bir mimari kullanır:
+
+```mermaid
+graph TD
+    subgraph Native Desktop Layer [Tauri 2.0 Rust Backend]
+        FS[Yerel Dosya Sistemi I/O]
+        NativeDialog[Windows Dialog API]
+        CLI[Arg & File Association]
+    end
+
+    subgraph Frontend Core [React 19 + TypeScript + Vite]
+        App[App.tsx State & Undo/Redo]
+        LazyModals[Code-Split Modals - React.lazy]
+        Viewer[PDFViewer.tsx]
+    end
+
+    subgraph Dual-Canvas Engine
+        BGCanvas[PDF.js Render Canvas - Background DPI]
+        OverlayCanvas[Interactive Live Overlay Canvas - 60 FPS]
+    end
+
+    subgraph PDF Generation & Security
+        PDFLib[pdf-lib Vector Serializer]
+        EncryptEngine[@pdfsmaller/pdf-encrypt AES-256 Engine]
+    end
+
+    CLI --> App
+    App --> Viewer
+    App --> LazyModals
+    Viewer --> BGCanvas
+    Viewer --> OverlayCanvas
+    App --> FS
+    App --> NativeDialog
+    App --> PDFLib
+    PDFLib --> EncryptEngine
+    EncryptEngine --> FS
+```
 
 ---
 
-### ✂️ 6. Gelişmiş Sayfa & Belge Yönetimi
-* **PDF Sayfalarını Bölme & Ayıkla (Split PDF):**
-  - Belirli sayfa aralığı çıkarma (`1-5, 8, 12-14`).
-  - Her sayfayı tek tek bağımsız PDF yapma.
-  - Tek ve çift sayfaları iki ayrı PDF'e ayırma.
-  - Sayfa sayısına göre gruplayarak bölme.
-* **Otomatik Sayfa Numaralandırma & Altbilgi:** Farklı formatlarda (`Sayfa 1 / 20`, `- 1 -`), konumlandırma ve kapak sayfasını atlama seçenekleriyle tek tıkla sayfa numarası basın.
-* **PDF Birleştirme (Merge):** Birden fazla PDF dosyasını tek bir belgede birleştirin.
-* **Sayfa Sıralama & Yönetim (Sol Panel):** Sayfaları sürükleyip bırakarak sıralayın, döndürün, çoğaltın veya silin.
+## ⚡ Performans & Kod Bölümleme (Code Splitting)
 
----
+Vite 8 ve React 19 mimarisi ile ağır modüller başlangıç paketinden ayrılmıştır (Code Splitting):
 
-### 🔍 6. Akıllı Tuval & Yakınlaştırma Motoru
-* **Akıllı Yakınlaştırma (`Ctrl + Mouse Tekerleği`):** Fare imlecinin olduğu noktaya odaklanarak %25 ile %400 arasında pürüzsüz yakınlaştırma/uzaklaştırma.
-* **Sayfayı Kaydır / Gezinme (`H` - Hand Tool):** Geniş sayfalarda fareyle tutarak akıcı şekilde dolaşın.
-* **Genişliğe Sığdır & Sayfayı Sığdır:** Tek tıkla ekranınıza en uygun görünümü ayarlayın.
-
----
-
-### 👥 7. İki PDF'i Yan Yana Karşılaştırma (Side-by-Side Diff)
-* İki farklı sözleşmeyi veya revizyonu yan yana iki panelde açıp **eşzamanlı kaydırma** ile aradaki farkları kolayca inceleyin.
-
----
-
-### 📉 8. Boyut Küçültme & Güvenlik
-* **PDF Sıkıştırma (Compress):** Düşük, Orta ve Yüksek sıkıştırma profilleriyle dosya boyutunu küçültün.
-* **128-bit AES Şifreleme (Password Protect):** Belgenize parola koyarak izinsiz erişimleri engelleyin.
-* **Hassas Veri Karartma / Gizleme (Redact):** TC Kimlik, telefon, adres gibi hassas verileri kalıcı olarak karartın.
-
----
-
-### 🌓 9. Göz Yormayan Okuma Modları
-* **Normal Mod**
-* **Sıcak Sepia Modu** (Kitap okuma keyfi)
-* **Gece Modu** (Ters çevrilmiş koyu tema)
-* **Yüksek Kontrast Modu** (Soluk taranmış belgeleri netleştirme)
+- **Ana Yükleme Paketi:** ~105 kB (Gzip: ~27 kB) — Anında açılış.
+- **İhtiyaç Anında Yüklenen Parçalar (On-Demand Lazy Chunks):**
+  - `OcrModal` & `Tesseract`: Yalnızca OCR aracı açıldığında yüklenir.
+  - `ExportOfficeModal`: Yalnızca ofis dışa aktarım penceresi istendiğinde yüklenir.
+  - `SecurityModal` & `AES-256 Engine`: Yalnızca şifreleme istendiğinde yüklenir.
+  - `ComparePdfModal`: Yalnızca karşılaştırma modu açıldığında yüklenir.
 
 ---
 
@@ -106,77 +153,105 @@
 
 | Kısayol | İşlev |
 |---|---|
-| **Ctrl + S** | Doğrudan Kaydet (Orijinal Dosyaya Kaydet) |
-| **Ctrl + Shift + S** | Farklı Kaydet... (Konum ve Ad Seç) |
-| **Ctrl + O** | PDF Dosyası Aç (Yerel Seçici) |
-| **Ctrl + Mouse Tekerleği** | Akıllı Yakınlaştırma / Uzaklaştırma |
-| **Ctrl + Z** | Geri Al (Undo) |
-| **Ctrl + Y** | Yinele (Redo) |
-| **Ctrl + F** | Belge İçinde Hızlı Arama |
-| **Ctrl + P** | Belgeyi Yazdır |
-| **V** | Seçim & Taşıma & Metin Kopyalama |
-| **H** | Sayfayı Kaydır / Gezin (Pan) |
-| **E** | Doğrudan Metin Düzenleme Aracı |
-| **P** | Canlı Çizim Kalemi |
-| **T** | Yeni Metin Kutusu Ekleme |
-| **Delete** | Seçili Nesneyi / Çizimi Sil |
+| <kbd>Ctrl</kbd> + <kbd>S</kbd> | **Doğrudan Kaydet** (Açılan dosyanın orijinal konumuna anında üzerine yazar) |
+| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd> | **Farklı Kaydet...** (Yerel Windows dosya seçici ile konum ve ad seç) |
+| <kbd>Ctrl</kbd> + <kbd>O</kbd> | **PDF Aç** (Yerel dosya penceresi) |
+| <kbd>Ctrl</kbd> + <kbd>Mouse Tekerleği</kbd> | **Akıllı Odaklı Yakınlaştırma / Uzaklaştırma** (%25 - %400) |
+| <kbd>Ctrl</kbd> + <kbd>Z</kbd> | **Geri Al** (Undo) |
+| <kbd>Ctrl</kbd> + <kbd>Y</kbd> / <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd> | **Yinele** (Redo) |
+| <kbd>Ctrl</kbd> + <kbd>F</kbd> | **Belge İçi Hızlı Arama & Vurgulama** |
+| <kbd>Ctrl</kbd> + <kbd>P</kbd> | **Yazdır** (Native Print) |
+| <kbd>V</kbd> | **Seç & Taşı & Kopyala** Aracı |
+| <kbd>H</kbd> | **Sayfayı Kaydır / Gezin (Pan)** Aracı |
+| <kbd>E</kbd> | **Doğrudan PDF Metin Düzenleme** Aracı |
+| <kbd>P</kbd> | **Serbest Çizim Kalemi** |
+| <kbd>T</kbd> | **Yeni Metin Kutusu Ekle** |
+| <kbd>Delete</kbd> / <kbd>Backspace</kbd> | **Seçili Çizim / Şekil / Damgayı Sil** |
 
 ---
 
 ## 🛠️ Teknolojik Altyapı
 
-* **Platform:** [Tauri 2.0](https://tauri.app/) (Rust tabanlı güvenli ve ultra hafif masaüstü mimarisi)
-* **Frontend:** React 19, TypeScript, Vite
-* **PDF Render Motoru:** PDF.js (Yerel Web Worker & CMap Glif Motoru)
-* **PDF Oluşturma & Dışa Aktarım:** `pdf-lib`
-* **OCR Motoru:** `tesseract.js`
-* **İkonografi & Tasarım:** Lucide React & Saf CSS Tasarım Sistemi (Glassmorphism, Dark/Light Mode)
-* **CI/CD & Otomasyon:** GitHub Actions (`tauri-action`) ile otomatik etiket sürüm eşitleme
+- **Masaüstü Motoru:** [Tauri 2.0](https://tauri.app/) (Rust 1.77+, ultra hafif bellek ayak izi)
+- **Kullanıcı Arayüzü:** React 19, TypeScript, Vite 8
+- **PDF Render & Metin:** PDF.js (`pdfjs-dist 6.2` Web Worker)
+- **PDF Oluşturma & Dönüşüm:** `pdf-lib 1.17`
+- **Şifreleme Motoru:** `@pdfsmaller/pdf-encrypt` (Web Crypto AES-256 & RC4)
+- **OCR Motoru:** `tesseract.js 7.0` (Türkçe + İngilizce modelleri)
+- **İkon Seti & Tasarım:** Lucide React, Glassmorphism, Saf CSS Değişkenleri
+- **Statik Kod Analizi:** Oxlint (Sıfır hata, sıfır uyarı)
 
 ---
 
-## 🚀 Geliştirme & Çalıştırma
+## 🚀 Geliştirme & Kurulum Rehberi
 
 ### Gereksinimler
-* [Node.js](https://nodejs.org/) (v18+)
-* [Rust](https://www.rust-lang.org/) (Cargo)
+- [Node.js](https://nodejs.org/) (v18 veya üzeri)
+- [Rust & Cargo](https://www.rust-lang.org/) (Tauri derlemesi için)
 
 ### Kurulum
 
 ```bash
+# Depoyu klonlayın
+git clone https://github.com/eekilinc/pdfstudio.git
+
+# Proje dizinine gidin
+cd pdfstudio
+
 # Bağımlılıkları yükleyin
 npm install
+```
 
-# Geliştirme sunucusunu başlatın (Tauri Masaüstü)
+### Geliştirme Modunu Başlatma
+
+```bash
+# Ön yüzü ve Tauri masaüstü penceresini hot-reload ile çalıştırın
 npm run tauri dev
 ```
 
-### Otomatik Sürüm Arttırma (Version Bump)
+### Statik Kod Analizi & Derleme Testi
 
 ```bash
-npm run bump:patch   # 1.0.0 -> 1.0.1
-npm run bump:minor   # 1.0.0 -> 1.1.0
-npm run bump:major   # 1.0.0 -> 2.0.0
+# Oxlint ile linter kontrolü
+npm run lint
+
+# TypeScript tipi ve Vite bundle derlemesi
+npm run build
 ```
 
-### Üretim Derlemesi (Release Binary & Installer)
+### Tek Komutla Otomatik Sürüm Eşitleme (Version Bump)
+
+Tüm proje dosyalarındaki (`package.json`, `tauri.conf.json`, `Cargo.toml`, `version.ts`) sürüm numarasını tek komutla günceller:
 
 ```bash
-# Windows x64 Kurulum Paketi (.exe) oluşturun
+npm run bump:patch   # 0.1.0 -> 0.1.1
+npm run bump:minor   # 0.1.0 -> 0.2.0
+npm run bump:major   # 0.1.0 -> 1.0.0
+```
+
+### Üretim Dağıtımı (Windows x64 NSIS Installer)
+
+```bash
+# Kurulum paketi (.exe) ve taşınabilir binary oluşturun
 npm run tauri build
 ```
 
 Derlenen dosyalar:
-* **Kurulum Dosyası (NSIS):** `src-tauri/target/release/bundle/nsis/PDFStudio_1.8.0_x64-setup.exe`
-* **Taşınabilir EXE:** `src-tauri/target/release/app.exe`
+- **NSIS Kurulum Dosyası:** `src-tauri/target/release/bundle/nsis/PDFStudio_*.exe`
+- **Taşınabilir (Portable) EXE:** `src-tauri/target/release/app.exe`
 
 ---
 
-## 🔒 Gizlilik & Güvenlik
+## 🔒 Gizlilik ve Güvenlik Beyannamesi
 
-PDF Studio Pro, **%100 Çevrimdışı ve Yerel (Local)** çalışır. Açtığınız veya düzenlediğiniz hiçbir belge, metin ya da imza internete veya üçüncü taraf sunuculara aktarılmaz.
+PDF Studio Pro, **%100 Yerel (Local-Only) ve Çevrimdışı** çalışacak şekilde tasarlanmıştır.
+
+1. **Sıfır Telemetri:** Hiçbir kullanıcı aktivitesi, analiz verisi veya kayıt tutulmaz.
+2. **Sıfır Bulut Bağımlılığı:** Açtığınız veya şifrelediğiniz hiçbir doküman harici bir sunucuya aktarılmaz.
+3. **Gerçek AES-256 Şifreleme:** Parolalar istemcide Web Crypto API ile işlenir ve diske doğrudan şifreli kaydedilir.
 
 ---
 
 ## 📄 Lisans
-Bu proje MIT lisansı altında korunmaktadır.
+
+Bu proje [MIT Lisansı](LICENSE) altında özgürce geliştirilmekte ve dağıtılmaktadır.
