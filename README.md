@@ -6,6 +6,8 @@
   <strong>Ultra Hızlı, Modern, Askeri Düzeyde Güvenli ve %100 Çevrimdışı Masaüstü PDF Düzenleme & Üretkenlik Paketi</strong>
 </p>
 
+[![Release](https://img.shields.io/github/v/release/eekilinc/pdfstudio?style=for-the-badge&color=8B5CF6&logo=github)](https://github.com/eekilinc/pdfstudio/releases/latest)
+[![CI/CD](https://img.shields.io/github/actions/workflow/status/eekilinc/pdfstudio/release.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=CI%2FCD)](https://github.com/eekilinc/pdfstudio/actions)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/eekilinc/pdfstudio)
 [![Framework](https://img.shields.io/badge/Tauri_2.0-Rust%20Backend-FFC135?style=for-the-badge&logo=tauri&logoColor=black)](https://tauri.app/)
 [![Frontend](https://img.shields.io/badge/React_19-TypeScript-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
@@ -16,6 +18,10 @@
 <br/>
 
 > **PDF Studio Pro**, tarayıcı sınırlarını aşan yerel masaüstü performansı, gelişmiş çift katmanlı tuval mimarisi (Dual-Canvas), optik karakter tanıma (OCR), doğrudan PDF metin değiştirme ve gerçek **AES-256** şifreleme desteği sunan yeni nesil bir PDF düzenleyicisidir. Hiçbir veriniz internete gönderilmez; her işlem tamamen bilgisayarınızda gerçekleşir.
+
+<br/>
+
+[⬇️ **En Son Windows Sürümünü İndir (.exe)**](https://github.com/eekilinc/pdfstudio/releases/latest) • [✨ Özellikler](#-öne-çıkan-başlıca-özellikler) • [⌨️ Kısayollar](#️-klavye-kısayolları)
 
 </div>
 
