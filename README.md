@@ -81,15 +81,16 @@
 - **Görsel Sayfa Sıralama (Thumbnail Sidebar):** Sayfaları sürükleyip bırakarak taşıyın, 90° döndürün, çoğaltın veya silin.
 - **Sayfa Numaralandırma & Filigran:** Tek tıkla altbilgi/üstbilgi formatlarında sayfa numarası ve yarı saydam filigran ekleyin.
 
-### 5. Çok Formatlı Ofis Dışa Aktarım Merkezi
+### 5. Yüksek Sadakatli Ofis & Format Dışa Aktarım Merkezi
 | Format | Uzantı | Açıklama |
 |---|---|---|
-| **Microsoft Word** | `.docx / .doc` | Paragraf, başlık ve hizalamaları koruyarak Word belgesine dönüştürür. |
-| **Microsoft Excel** | `.xlsx / .csv` | Tablo ve listeleri satır/sütun tablosu halinde UTF-8 BOM destekli Excel dosyası yapar. |
-| **PowerPoint** | `.pptx / HTML` | Her PDF sayfasını bağımsız bir sunum slaytına dönüştürür. |
-| **Markdown** | `.md` | Dokümantasyon için başlık ve listeleri temiz Markdown formatında dışa aktarır. |
+| **Microsoft Word** | `.docx` | Gerçek OpenXML ikili formatı; H1/H2/H3 başlık hiyerarşisi, gerçek kenarlıklı Word tabloları ve madde listeleri oluşturur. |
+| **Microsoft Excel** | `.xlsx` | Akıllı çok sütunlu koordinat analizi; sayısal değerleri hesaplanabilir hücre tipi yapar, çoklu çalışma sayfası (sheet) destekler. |
+| **CSV Veri Tablosu** | `.csv` | UTF-8 BOM destekli, noktalı virgül veya virgül ayraçlı çok sütunlu saf veri tablosu. |
+| **PowerPoint** | `.pptx` | 16:9 geniş ekran slaytlar; her PDF sayfasını başlık ve maddeleriyle düzenlenebilir gerçek sunum yapar. |
+| **Markdown** | `.md` | Başlık, liste ve gerçek Markdown tabloları (`| Sütun |`) içeren dokümantasyon çıktısı. |
 | **Düz Metin** | `.txt` | Tüm formatlardan arındırılmış temiz UTF-8 saf metin çıktısı verir. |
-| **Web Sayfası** | `.html` | Modern ve bağımsız web sayfası olarak kaydeder. |
+| **Web Sayfası** | `.html` | Responsive kart tasarımı ve tablo görünümü sunan bağımsız web sayfası. |
 | **Görsel Paketi** | `.png / .jpg` | Sayfaları yüksek çözünürlüklü raster görsel formatında dışa aktarır. |
 
 ### 6. Çift PDF Yan Yana Karşılaştırma (Side-by-Side Diff)

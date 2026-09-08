@@ -11,10 +11,22 @@ import {
   Sparkles,
   Layers,
   FileCheck2,
-  FolderOpen
+  FolderOpen,
+  TableProperties
 } from 'lucide-react';
 import type { PDFDocumentState } from '../types/pdf';
 import { getSharedPdfDoc } from '../utils/pdfInit';
+import {
+  extractStructuredPage,
+  generateDocx,
+  generateXlsx,
+  generatePptx,
+  generateCsv,
+  generateMarkdown,
+  generateHtml,
+  generateTxt,
+  type StructuredPage,
+} from '../utils/officeExport';
 
 interface ExportOfficeModalProps {
   isOpen: boolean;
@@ -23,7 +35,7 @@ interface ExportOfficeModalProps {
   onShowToast?: (text: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-type ExportFormat = 'docx' | 'xlsx' | 'pptx' | 'txt' | 'md' | 'html';
+export type ExportFormat = 'docx' | 'xlsx' | 'csv' | 'pptx' | 'md' | 'html' | 'txt';
 type SaveLocationMode = 'ask' | 'downloads';
 
 export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
@@ -34,16 +46,20 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
 }) => {
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('docx');
   const [includePageNumbers, setIncludePageNumbers] = useState(true);
+  const [multiSheetExcel, setMultiSheetExcel] = useState(false);
+  const [csvDelimiter, setCsvDelimiter] = useState<';' | ','>(';');
   const [isExporting, setIsExporting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string>('');
+  const [progressPercent, setProgressPercent] = useState<number>(0);
   const [exportedSuccess, setExportedSuccess] = useState<string | null>(null);
+  const [pageRangeMode, setPageRangeMode] = useState<'all' | 'custom'>('all');
+  const [customPages, setCustomPages] = useState('1');
+  const [saveLocationMode, setSaveLocationMode] = useState<SaveLocationMode>('ask');
 
   const notify = (text: string, type: 'success' | 'error' | 'info' = 'error') => {
     if (onShowToast) onShowToast(text, type);
     else alert(text);
   };
-  const [pageRangeMode, setPageRangeMode] = useState<'all' | 'custom'>('all');
-  const [customPages, setCustomPages] = useState('1');
-  const [saveLocationMode, setSaveLocationMode] = useState<SaveLocationMode>('ask');
 
   if (!isOpen) return null;
 
@@ -53,65 +69,77 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
     ext: string;
     filterDesc: string;
     filterExt: string;
+    badge: string;
     desc: string;
     icon: React.ElementType;
     color: string;
     bg: string;
+    isBinary: boolean;
   }> = [
     {
       id: 'docx',
       title: 'Microsoft Word',
-      ext: '.doc / .docx',
+      ext: '.docx',
       filterDesc: 'Word Belgesi',
-      filterExt: 'doc',
-      desc: 'Başlıklar, paragraflar ve sayfa düzenini koruyarak düzenlenebilir Word belgesine dönüştürür.',
+      filterExt: 'docx',
+      badge: 'Gerçek OpenXML',
+      desc: 'Başlıklar, tablolar, madde listeleri ve sayfa düzenini koruyan gerçek binary .docx belgesi.',
       icon: FileText,
       color: '#2563eb',
       bg: 'rgba(37, 99, 235, 0.15)',
+      isBinary: true,
     },
     {
       id: 'xlsx',
-      title: 'Microsoft Excel / CSV',
-      ext: '.csv / .xlsx',
-      filterDesc: 'Excel / CSV Tablosu',
-      filterExt: 'csv',
-      desc: 'Belgedeki tablo, sayısal ve liste verilerini satır/sütun tablosu halinde dışa aktarır.',
+      title: 'Microsoft Excel',
+      ext: '.xlsx',
+      filterDesc: 'Excel Çalışma Kitabı',
+      filterExt: 'xlsx',
+      badge: 'Çok Sütunlu Tablo',
+      desc: 'Akıllı tablo koordinat analizi, sayısal hücre formatı ve sekme desteği içeren gerçek Excel tablosu.',
       icon: FileSpreadsheet,
       color: '#16a34a',
       bg: 'rgba(22, 163, 74, 0.15)',
+      isBinary: true,
+    },
+    {
+      id: 'csv',
+      title: 'CSV Veri Tablosu',
+      ext: '.csv',
+      filterDesc: 'CSV Tablosu',
+      filterExt: 'csv',
+      badge: 'UTF-8 BOM',
+      desc: 'Excel, SQL ve veri analitiği yazılımlarıyla %100 uyumlu, sütunlara ayrılmış saf tablo verisi.',
+      icon: TableProperties,
+      color: '#059669',
+      bg: 'rgba(5, 150, 105, 0.15)',
+      isBinary: false,
     },
     {
       id: 'pptx',
       title: 'PowerPoint Sunumu',
-      ext: '.html / .pptx',
-      filterDesc: 'Sunum Dosyası',
-      filterExt: 'html',
-      desc: 'Her PDF sayfasını bağımsız bir sunum slaytına ve görsel sunum formatına dönüştürür.',
+      ext: '.pptx',
+      filterDesc: 'PowerPoint Sunumu',
+      filterExt: 'pptx',
+      badge: '16:9 Geniş Ekran',
+      desc: 'Her PDF sayfasını bağımsız bir sunum slaytına dönüştüren gerçek OpenXML .pptx paketi.',
       icon: Presentation,
       color: '#ea580c',
       bg: 'rgba(234, 88, 12, 0.15)',
-    },
-    {
-      id: 'txt',
-      title: 'Düz Metin (UTF-8)',
-      ext: '.txt',
-      filterDesc: 'Metin Dosyası',
-      filterExt: 'txt',
-      desc: 'Tüm metin içeriğini temiz, formatlardan arındırılmış saf metin dosyası olarak kaydeder.',
-      icon: FileCheck2,
-      color: '#64748b',
-      bg: 'rgba(100, 116, 139, 0.15)',
+      isBinary: true,
     },
     {
       id: 'md',
-      title: 'Markdown Belgesi',
+      title: 'Markdown Dokümanı',
       ext: '.md',
       filterDesc: 'Markdown Belgesi',
       filterExt: 'md',
-      desc: 'Yazılım ve dokümantasyon için başlık ve listeleri Markdown formatında hazırlar.',
+      badge: 'GitHub / Notion',
+      desc: 'Yazılım ve dokümantasyon için başlıklar, listeler ve gerçek Markdown tabloları içeren doküman.',
       icon: FileCode,
       color: '#8b5cf6',
       bg: 'rgba(139, 92, 246, 0.15)',
+      isBinary: false,
     },
     {
       id: 'html',
@@ -119,10 +147,25 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
       ext: '.html',
       filterDesc: 'HTML Web Sayfası',
       filterExt: 'html',
-      desc: 'Tarayıcıda anında görüntülenebilir şık, modern bir web sayfası oluşturur.',
+      badge: 'Responsive Web',
+      desc: 'Tarayıcıda anında görüntülenebilir şık, modern, kart tasarımlı ve tablolu bağımsız web dokümanı.',
       icon: Layers,
       color: '#06b6d4',
       bg: 'rgba(6, 182, 212, 0.15)',
+      isBinary: false,
+    },
+    {
+      id: 'txt',
+      title: 'Düz Metin',
+      ext: '.txt',
+      filterDesc: 'Metin Dosyası',
+      filterExt: 'txt',
+      badge: 'Temiz UTF-8',
+      desc: 'Tüm metin içeriğini temiz, formatlardan arındırılmış saf metin dosyası olarak kaydeder.',
+      icon: FileCheck2,
+      color: '#64748b',
+      bg: 'rgba(100, 116, 139, 0.15)',
+      isBinary: false,
     },
   ];
 
@@ -130,6 +173,8 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
     if (!docState.data) return;
     setIsExporting(true);
     setExportedSuccess(null);
+    setStatusMessage('PDF belgesi yükleniyor...');
+    setProgressPercent(10);
 
     try {
       const pdf = await getSharedPdfDoc(docState.data);
@@ -165,228 +210,84 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
         }
       }
 
-      // Extract text content from pages
-      const extractedPages: Array<{ pageNum: number; lines: string[] }> = [];
+      // Extract structured page contents
+      const structuredPages: StructuredPage[] = [];
 
-      for (const pageNum of targetPageIndices) {
+      for (let i = 0; i < targetPageIndices.length; i++) {
+        const pageNum = targetPageIndices[i];
+        setStatusMessage(`Sayfa ${pageNum} / ${totalPages} taranıyor ve yapı ayrıştırılıyor...`);
+        const pct = Math.round(15 + ((i + 1) / targetPageIndices.length) * 55);
+        setProgressPercent(pct);
+
         const page = await pdf.getPage(pageNum);
-        const textContent = await page.getTextContent();
-        const items = textContent.items as Array<{ str: string; transform: number[] }>;
-
-        const sorted = [...items]
-          .filter(it => it.str && it.str.trim().length > 0)
-          .sort((a, b) => {
-            const yDiff = b.transform[5] - a.transform[5];
-            if (Math.abs(yDiff) > 6) return yDiff;
-            return a.transform[4] - b.transform[4];
-          });
-
-        const lines: string[] = [];
-        let curLine: string[] = [];
-        let lastY: number | null = null;
-
-        sorted.forEach(it => {
-          const y = it.transform[5];
-          if (lastY === null || Math.abs(lastY - y) <= 6) {
-            curLine.push(it.str);
-          } else {
-            if (curLine.length > 0) lines.push(curLine.join(' '));
-            curLine = [it.str];
-          }
-          lastY = y;
-        });
-        if (curLine.length > 0) lines.push(curLine.join(' '));
-
-        extractedPages.push({ pageNum, lines });
+        const structured = await extractStructuredPage(page, pageNum);
+        structuredPages.push(structured);
       }
+
+      setStatusMessage('Belge formatlanıyor ve derleniyor...');
+      setProgressPercent(75);
 
       const baseName = docState.filename.replace(/\.pdf$/i, '') || 'Belge';
       const currentFmt = formats.find(f => f.id === selectedFormat)!;
-      let outputContent = '';
+
+      let binaryData: Uint8Array | null = null;
+      let textData: string | null = null;
       let defaultFileName = '';
-      let mimeType = 'text/plain;charset=utf-8';
+      let mimeType = '';
 
-      // 1. WORD (.doc / .docx)
       if (selectedFormat === 'docx') {
-        defaultFileName = `${baseName}.doc`;
-        mimeType = 'application/msword;charset=utf-8';
-        let bodyHtml = '';
-        extractedPages.forEach((p, idx) => {
-          if (includePageNumbers) {
-            bodyHtml += `<div class="page-header">PDF Studio Pro &bull; Sayfa ${p.pageNum} / ${totalPages}</div>`;
-          }
-          p.lines.forEach((line) => {
-            if (line.length < 50 && (line.toUpperCase() === line || /^\d+\./.test(line))) {
-              bodyHtml += `<h2>${escapeHtml(line)}</h2>`;
-            } else {
-              bodyHtml += `<p>${escapeHtml(line)}</p>`;
-            }
-          });
-          if (idx < extractedPages.length - 1) {
-            bodyHtml += `<div class="page-break"></div><br/>`;
-          }
+        defaultFileName = `${baseName}.docx`;
+        mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        binaryData = await generateDocx(structuredPages, {
+          docTitle: baseName,
+          includePageNumbers,
         });
-
-        outputContent = `\uFEFF
-          <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-          <head>
-            <meta charset='utf-8'>
-            <title>${escapeHtml(baseName)}</title>
-            <style>
-              body { font-family: 'Calibri', 'Arial', sans-serif; font-size: 11pt; line-height: 1.5; color: #0f172a; margin: 30pt; }
-              h1 { font-size: 18pt; color: #1e3a8a; margin-top: 16pt; margin-bottom: 6pt; font-weight: bold; }
-              h2 { font-size: 13pt; color: #1e40af; margin-top: 12pt; margin-bottom: 4pt; font-weight: bold; }
-              p { margin-top: 0; margin-bottom: 6pt; text-align: justify; }
-              .page-break { page-break-after: always; }
-              .page-header { font-size: 9pt; color: #64748b; border-bottom: 1px solid #cbd5e1; padding-bottom: 4pt; margin-bottom: 12pt; }
-            </style>
-          </head>
-          <body>
-            <h1>${escapeHtml(baseName)}</h1>
-            <hr style="border: 0; height: 1px; background: #e2e8f0; margin-bottom: 14pt;" />
-            ${bodyHtml}
-          </body>
-          </html>
-        `;
-      }
-
-      // 2. EXCEL (.csv with UTF-8 BOM)
-      else if (selectedFormat === 'xlsx') {
-        defaultFileName = `${baseName}_Tablo.csv`;
+      } else if (selectedFormat === 'xlsx') {
+        defaultFileName = `${baseName}.xlsx`;
+        mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        binaryData = await generateXlsx(structuredPages, {
+          docTitle: baseName,
+          includePageNumbers,
+          multiSheetExcel,
+        });
+      } else if (selectedFormat === 'csv') {
+        defaultFileName = `${baseName}.csv`;
         mimeType = 'text/csv;charset=utf-8;';
-        let csv = '\uFEFFSayfa;Satır No;İçerik;Metin Parçaları\n';
-        extractedPages.forEach((p) => {
-          p.lines.forEach((line, lineIdx) => {
-            const sanitized = line.replace(/"/g, '""');
-            csv += `"${p.pageNum}";"${lineIdx + 1}";"${sanitized}";"${sanitized.split(' ').slice(0, 3).join(' ')}"\n`;
-          });
+        textData = generateCsv(structuredPages, {
+          includePageNumbers,
+          csvDelimiter,
         });
-        outputContent = csv;
-      }
-
-      // 3. POWERPOINT (.html presentation slides)
-      else if (selectedFormat === 'pptx') {
-        defaultFileName = `${baseName}_Sunum.html`;
-        mimeType = 'text/html;charset=utf-8';
-        let slidesHtml = '';
-        extractedPages.forEach((p) => {
-          const title = p.lines[0] || `Slayt ${p.pageNum}`;
-          const bodyBullets = p.lines.slice(1).map(l => `<li>${escapeHtml(l)}</li>`).join('');
-
-          slidesHtml += `
-            <div class="slide">
-              <div class="slide-header">
-                <h2>${escapeHtml(title)}</h2>
-                <span class="slide-number">#${p.pageNum}</span>
-              </div>
-              <ul class="slide-body">
-                ${bodyBullets || '<li>İçerik bulunamadı</li>'}
-              </ul>
-              <div class="slide-footer">PDF Studio Pro Sunum Dışa Aktarımı</div>
-            </div>
-          `;
+      } else if (selectedFormat === 'pptx') {
+        defaultFileName = `${baseName}.pptx`;
+        mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+        binaryData = await generatePptx(structuredPages, {
+          docTitle: baseName,
+          includePageNumbers,
         });
-
-        outputContent = `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <title>${escapeHtml(baseName)} - Sunum</title>
-            <style>
-              body { font-family: 'Inter', -apple-system, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px 20px; display: flex; flex-direction: column; align-items: center; gap: 30px; }
-              .slide { width: 800px; min-height: 450px; background: #1e293b; border-radius: 12px; padding: 40px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid #334155; position: relative; display: flex; flex-direction: column; }
-              .slide-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #38bdf8; padding-bottom: 12px; margin-bottom: 20px; }
-              .slide-header h2 { margin: 0; font-size: 22px; color: #38bdf8; font-weight: 700; }
-              .slide-number { font-size: 12px; background: #38bdf8; color: #0f172a; padding: 2px 8px; border-radius: 6px; font-weight: bold; }
-              .slide-body { font-size: 15px; line-height: 1.7; color: #e2e8f0; flex: 1; padding-left: 20px; }
-              .slide-body li { margin-bottom: 10px; }
-              .slide-footer { font-size: 11px; color: #64748b; border-top: 1px solid #334155; padding-top: 10px; margin-top: 20px; }
-              @media print { body { background: none; } .slide { page-break-after: always; box-shadow: none; border: 1px solid #ccc; color: #000; background: #fff; } }
-            </style>
-          </head>
-          <body>
-            ${slidesHtml}
-          </body>
-          </html>
-        `;
-      }
-
-      // 4. PLAIN TEXT (.txt)
-      else if (selectedFormat === 'txt') {
-        defaultFileName = `${baseName}.txt`;
-        mimeType = 'text/plain;charset=utf-8';
-        let txt = `============================================================\n`;
-        txt += `PDF STUDIO PRO - METİN DIŞA AKTARIMI\n`;
-        txt += `Belge: ${baseName}.pdf | Toplam Sayfa: ${totalPages}\n`;
-        txt += `Tarih: ${new Date().toLocaleString('tr-TR')}\n`;
-        txt += `============================================================\n\n`;
-
-        extractedPages.forEach((p) => {
-          if (includePageNumbers) {
-            txt += `\n--- SAYFA ${p.pageNum} ---\n\n`;
-          }
-          txt += p.lines.join('\n') + '\n';
-        });
-        outputContent = '\uFEFF' + txt;
-      }
-
-      // 5. MARKDOWN (.md)
-      else if (selectedFormat === 'md') {
+      } else if (selectedFormat === 'md') {
         defaultFileName = `${baseName}.md`;
-        mimeType = 'text/markdown;charset=utf-8';
-        let md = `# ${baseName}\n\n`;
-        extractedPages.forEach((p) => {
-          if (includePageNumbers) {
-            md += `\n## Sayfa ${p.pageNum}\n\n`;
-          }
-          p.lines.forEach((l) => {
-            if (l.length < 40 && (l.toUpperCase() === l || /^\d+\./.test(l))) {
-              md += `### ${l}\n\n`;
-            } else {
-              md += `${l}\n\n`;
-            }
-          });
-          md += `---\n`;
+        mimeType = 'text/markdown;charset=utf-8;';
+        textData = generateMarkdown(structuredPages, {
+          docTitle: baseName,
+          includePageNumbers,
         });
-        outputContent = md;
-      }
-
-      // 6. HTML WEB PAGE (.html)
-      else if (selectedFormat === 'html') {
+      } else if (selectedFormat === 'html') {
         defaultFileName = `${baseName}.html`;
-        mimeType = 'text/html;charset=utf-8';
-        let htmlBody = '';
-        extractedPages.forEach((p) => {
-          htmlBody += `<section class="page-card"><div class="page-badge">Sayfa ${p.pageNum}</div>`;
-          p.lines.forEach((l) => {
-            htmlBody += `<p>${escapeHtml(l)}</p>`;
-          });
-          htmlBody += `</section>`;
+        mimeType = 'text/html;charset=utf-8;';
+        textData = generateHtml(structuredPages, {
+          docTitle: baseName,
         });
-
-        outputContent = `
-          <!DOCTYPE html>
-          <html lang="tr">
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>${escapeHtml(baseName)}</title>
-            <style>
-              body { font-family: 'Inter', system-ui, sans-serif; background: #f8fafc; color: #1e293b; max-width: 860px; margin: 0 auto; padding: 40px 20px; line-height: 1.6; }
-              h1 { font-size: 26px; color: #0f172a; margin-bottom: 24px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; }
-              .page-card { background: #ffffff; border-radius: 12px; padding: 30px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; position: relative; }
-              .page-badge { position: absolute; top: 16px; right: 16px; background: #e0f2fe; color: #0284c7; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
-              p { margin: 0 0 10px 0; }
-            </style>
-          </head>
-          <body>
-            <h1>${escapeHtml(baseName)}</h1>
-            ${htmlBody}
-          </body>
-          </html>
-        `;
+      } else if (selectedFormat === 'txt') {
+        defaultFileName = `${baseName}.txt`;
+        mimeType = 'text/plain;charset=utf-8;';
+        textData = generateTxt(structuredPages, {
+          docTitle: baseName,
+          includePageNumbers,
+        });
       }
+
+      setStatusMessage('Dosya kaydediliyor...');
+      setProgressPercent(90);
 
       // Handle Save Location
       if (saveLocationMode === 'ask') {
@@ -400,10 +301,17 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
           });
 
           if (targetPath) {
-            await invoke('write_text_file', {
-              path: targetPath,
-              contents: outputContent,
-            });
+            if (binaryData) {
+              await invoke('write_pdf_file', {
+                path: targetPath,
+                contents: Array.from(binaryData),
+              });
+            } else if (textData) {
+              await invoke('write_text_file', {
+                path: targetPath,
+                contents: textData,
+              });
+            }
             savedPath = targetPath;
           } else {
             // User cancelled save dialog
@@ -411,18 +319,33 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
             return;
           }
         } catch {
-          // Tauri not available or error, fallback to browser download
-          const blob = new Blob([outputContent], { type: mimeType });
-          triggerDownload(blob, defaultFileName);
+          // Tauri not available or fallback to browser download
+          if (binaryData) {
+            const blob = new Blob([binaryData as unknown as BlobPart], { type: mimeType });
+            triggerDownload(blob, defaultFileName);
+          } else if (textData) {
+            const blob = new Blob([textData], { type: mimeType });
+            triggerDownload(blob, defaultFileName);
+          }
           savedPath = defaultFileName;
         }
-        setExportedSuccess(savedPath ? `Dosya başarıyla kaydedildi: ${savedPath}` : 'Dışa aktarıldı!');
+        notify(`Dosya başarıyla aktarıldı: ${savedPath}`, 'success');
+        setExportedSuccess(`Başarıyla kaydedildi: ${savedPath}`);
       } else {
-        // Direct Download (Downloads Folder)
-        const blob = new Blob([outputContent], { type: mimeType });
-        triggerDownload(blob, defaultFileName);
-        setExportedSuccess(`İndirilenler klasörüne kaydedildi: ${defaultFileName}`);
+        // Direct Download to Downloads Folder
+        if (binaryData) {
+          const blob = new Blob([binaryData as unknown as BlobPart], { type: mimeType });
+          triggerDownload(blob, defaultFileName);
+        } else if (textData) {
+          const blob = new Blob([textData], { type: mimeType });
+          triggerDownload(blob, defaultFileName);
+        }
+        notify(`İndirilenler klasörüne kaydedildi: ${defaultFileName}`, 'success');
+        setExportedSuccess(`İndirilenler klasörüne aktarıldı: ${defaultFileName}`);
       }
+
+      setProgressPercent(100);
+      setStatusMessage('Tamamlandı!');
 
       setTimeout(() => {
         setIsExporting(false);
@@ -445,15 +368,6 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const escapeHtml = (str: string) => {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  };
-
   return (
     <div
       style={{
@@ -472,9 +386,9 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
       <div
         className="glass-panel animate-scale-up"
         style={{
-          width: '700px',
+          width: '740px',
           maxWidth: '95vw',
-          maxHeight: '90vh',
+          maxHeight: '92vh',
           display: 'flex',
           flexDirection: 'column',
           borderRadius: 'var(--radius-lg)',
@@ -498,8 +412,8 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
               style={{
-                width: '36px',
-                height: '36px',
+                width: '38px',
+                height: '38px',
                 borderRadius: '10px',
                 background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
                 display: 'flex',
@@ -516,7 +430,7 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
                 Ofis & Format Dışa Aktarma Merkezi
               </h2>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                PDF belgenizi Word, Excel, PowerPoint ve diğer formatlara dönüştürün
+                PDF belgenizi Word (.docx), Excel (.xlsx), PowerPoint (.pptx) ve diğer formatlara tam olarak dönüştürün
               </div>
             </div>
           </div>
@@ -534,7 +448,7 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
             <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px', display: 'block' }}>
               Dışa Aktarılacak Formatı Seçin:
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
               {formats.map((fmt) => {
                 const isSelected = selectedFormat === fmt.id;
                 const IconComponent = fmt.icon;
@@ -557,16 +471,21 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ width: '26px', height: '26px', borderRadius: '6px', background: fmt.color, color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <IconComponent size={14} />
+                        <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: fmt.color, color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <IconComponent size={15} />
                         </div>
-                        <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {fmt.title}
-                        </span>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {fmt.title}
+                          </div>
+                          <div style={{ fontSize: '10px', fontWeight: 600, color: fmt.color }}>
+                            {fmt.badge}
+                          </div>
+                        </div>
                       </div>
                       {isSelected && <Check size={16} color={fmt.color} />}
                     </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.35, marginTop: '2px' }}>
                       {fmt.desc}
                     </div>
                   </div>
@@ -574,6 +493,58 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
               })}
             </div>
           </div>
+
+          {/* FORMAT-SPECIFIC ADVANCED OPTIONS */}
+          {selectedFormat === 'xlsx' && (
+            <div style={{ background: 'var(--bg-secondary)', padding: '12px 16px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(22, 163, 74, 0.3)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#16a34a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FileSpreadsheet size={15} />
+                <span>Excel (.xlsx) Yapılandırması</span>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-primary)' }}>
+                <input
+                  type="checkbox"
+                  checked={multiSheetExcel}
+                  onChange={(e) => setMultiSheetExcel(e.target.checked)}
+                />
+                <span>Her PDF sayfası için ayrı bir Excel sekmesi (Çalışma Sayfası) oluştur</span>
+              </label>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                {multiSheetExcel
+                  ? 'Her sayfa "Sayfa 1", "Sayfa 2" adlarıyla bağımsız sekmelerde saklanır.'
+                  : 'Tüm PDF sayfaları tek bir ana Excel tablosunda birleştirilir.'}
+              </div>
+            </div>
+          )}
+
+          {selectedFormat === 'csv' && (
+            <div style={{ background: 'var(--bg-secondary)', padding: '12px 16px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(5, 150, 105, 0.3)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#059669', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <TableProperties size={15} />
+                <span>CSV Ayraç Karakteri</span>
+              </div>
+              <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                  <input
+                    type="radio"
+                    name="csvDelim"
+                    checked={csvDelimiter === ';'}
+                    onChange={() => setCsvDelimiter(';')}
+                  />
+                  <span>Noktalı Virgül ( ; ) - Türkçe Excel için Önerilen</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                  <input
+                    type="radio"
+                    name="csvDelim"
+                    checked={csvDelimiter === ','}
+                    onChange={() => setCsvDelimiter(',')}
+                  />
+                  <span>Virgül ( , ) - Standart Uluslararası</span>
+                </label>
+              </div>
+            </div>
+          )}
 
           {/* SAVE DESTINATION / LOCATION PREFERENCE */}
           <div style={{ background: 'var(--bg-secondary)', padding: '14px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -646,7 +617,7 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
           {/* EXPORT OPTIONS */}
           <div style={{ background: 'var(--bg-secondary)', padding: '14px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-              Dönüştürme Seçenekleri
+              Sayfa Aralığı ve Biçimlendirme
             </div>
 
             {/* Page Range Selection */}
@@ -701,6 +672,26 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
               <span>Sayfa numaralarını ve başlıklarını belgede göster</span>
             </label>
           </div>
+
+          {/* PROGRESS INDICATOR */}
+          {isExporting && (
+            <div style={{ background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', padding: '12px 16px', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-primary)', fontWeight: 600 }}>
+                <span>{statusMessage || 'İşleniyor...'}</span>
+                <span>%{progressPercent}</span>
+              </div>
+              <div style={{ width: '100%', height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: `${progressPercent}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #38bdf8, #2563eb)',
+                    transition: 'width 0.2s ease',
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
           {/* NOTIFICATION FEEDBACK */}
           {exportedSuccess && (
