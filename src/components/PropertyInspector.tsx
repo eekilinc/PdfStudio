@@ -75,6 +75,9 @@ export const PropertyInspector: React.FC<PropertyInspectorProps> = ({
   return (
     <div style={{
       height: '38px',
+      minHeight: '38px',
+      maxHeight: '38px',
+      flexShrink: 0,
       background: 'var(--bg-secondary)',
       borderBottom: '1px solid var(--border-color)',
       display: 'flex',

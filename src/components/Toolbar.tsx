@@ -63,6 +63,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   return (
     <div className="glass-panel" style={{
       height: '44px',
+      minHeight: '44px',
+      maxHeight: '44px',
+      flexShrink: 0,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',

@@ -126,6 +126,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       style={{
         height: '26px',
         minHeight: '26px',
+        maxHeight: '26px',
+        flexShrink: 0,
         background: 'var(--bg-secondary)',
         borderTop: '1px solid var(--border-color)',
         display: 'flex',

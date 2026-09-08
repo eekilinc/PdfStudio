@@ -883,6 +883,17 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Guarantee that window / documentElement can never scroll out of view
+  useEffect(() => {
+    const lockWindowScroll = () => {
+      if (window.scrollY !== 0 || window.scrollX !== 0) {
+        window.scrollTo(0, 0);
+      }
+    };
+    window.addEventListener('scroll', lockWindowScroll, { passive: true });
+    return () => window.removeEventListener('scroll', lockWindowScroll);
+  }, []);
+
   const activePages = docState.pageOrder
     .map(idx => docState.pages.find(p => p.pageIndex === idx))
     .filter((p): p is PageState => p !== undefined && !p.isDeleted);
@@ -892,7 +903,7 @@ export function App() {
   const currentActualPage = activePages.find(p => p.pageIndex === currentPageIndex) || activePages[0];
 
   return (
-    <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Floating Action Toast Notification */}
       {toast && (
         <div

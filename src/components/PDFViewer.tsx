@@ -99,12 +99,31 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     .map(idx => docState.pages.find(p => p.pageIndex === idx))
     .filter((p): p is PageState => p !== undefined && !p.isDeleted);
 
-  // Smooth scroll to selected page when thumbnail is clicked
+  // Smooth scroll to selected page ONLY within containerRef, never scrolling window/navbar
   useEffect(() => {
     if (currentPageIndex !== undefined && currentPageIndex !== null) {
+      const container = containerRef.current;
       const pageEl = pageRefs.current.get(currentPageIndex);
-      if (pageEl) {
-        pageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (container && pageEl) {
+        const containerRect = container.getBoundingClientRect();
+        const pageRect = pageEl.getBoundingClientRect();
+
+        // Check if page is already comfortably visible inside the viewer container
+        const isAlreadyVisible =
+          pageRect.top >= containerRect.top &&
+          pageRect.bottom <= containerRect.bottom;
+
+        if (!isAlreadyVisible) {
+          const targetScrollTop =
+            container.scrollTop +
+            (pageRect.top - containerRect.top) -
+            Math.max(16, (container.clientHeight - pageRect.height) / 2);
+
+          container.scrollTo({
+            top: Math.max(0, targetScrollTop),
+            behavior: 'smooth',
+          });
+        }
       }
     }
   }, [currentPageIndex]);
@@ -1331,7 +1350,11 @@ const PageItem: React.FC<PageItemProps> = ({
   return (
     <div
       ref={containerRef}
-      onClick={onSelectThisPage}
+      onClick={() => {
+        if (!isCurrentPage) {
+          onSelectThisPage();
+        }
+      }}
       style={{
         position: 'relative',
         width: `${pageWidth}px`,

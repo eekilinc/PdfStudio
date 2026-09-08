@@ -174,6 +174,8 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="glass-panel" style={{
       height: '52px',
       minHeight: '52px',
+      maxHeight: '52px',
+      flexShrink: 0,
       display: 'grid',
       gridTemplateColumns: 'auto 1fr auto',
       alignItems: 'center',
