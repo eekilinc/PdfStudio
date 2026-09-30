@@ -30,16 +30,23 @@ export const DocumentTabs: React.FC<DocumentTabsProps> = ({
 
   return (
     <div
-      className="flex items-center gap-1.5 px-3 py-1.5 border-b select-none overflow-x-auto no-scrollbar"
-      style={{
-        backgroundColor: 'var(--header-bg, rgba(15, 23, 42, 0.75))',
-        borderColor: 'var(--border-color, rgba(255, 255, 255, 0.08))',
-        backdropFilter: 'blur(12px)',
-      }}
+      className="doc-tabs-bar"
       role="tablist"
       aria-label="Açık Belgeler"
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+      }}
     >
-      <div className="flex items-center gap-1 overflow-x-auto max-w-full">
+      <div
+        className="doc-tabs-list"
+        style={{
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+        }}
+      >
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const displayName = tab.filename || 'İsimsiz Belge';
@@ -50,19 +57,26 @@ export const DocumentTabs: React.FC<DocumentTabsProps> = ({
               role="tab"
               aria-selected={isActive}
               onClick={() => onSelectTab(tab.id)}
-              className={`group relative flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 border max-w-[200px] shrink-0 ${
-                isActive
-                  ? 'bg-blue-600/20 text-blue-400 border-blue-500/40 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border-transparent'
-              }`}
+              className={`doc-tab-item ${isActive ? 'active' : ''}`}
               title={tab.filePath || displayName}
+              style={{
+                display: 'inline-flex',
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}
             >
-              <FileText className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-blue-400' : 'text-slate-500'}`} />
-              <span className="truncate max-w-[130px]">{displayName}</span>
+              <FileText
+                size={14}
+                style={{
+                  color: isActive ? 'var(--accent-primary)' : 'var(--text-muted)',
+                  flexShrink: 0,
+                }}
+              />
+              <span className="doc-tab-title">{displayName}</span>
 
               {tab.isDirty && (
                 <span
-                  className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"
+                  className="doc-tab-dirty-indicator"
                   title="Kaydedilmemiş değişiklikler var"
                 />
               )}
@@ -72,9 +86,10 @@ export const DocumentTabs: React.FC<DocumentTabsProps> = ({
                   type="button"
                   onClick={(e) => onCloseTab(tab.id, e)}
                   aria-label={`${displayName} sekmesini kapat`}
-                  className="p-0.5 rounded-md hover:bg-slate-700/60 text-slate-500 hover:text-slate-200 transition-colors shrink-0 ml-0.5"
+                  className="doc-tab-close-btn"
+                  title="Sekmeyi Kapat"
                 >
-                  <X className="w-3 h-3" />
+                  <X size={12} />
                 </button>
               )}
             </div>
@@ -87,9 +102,9 @@ export const DocumentTabs: React.FC<DocumentTabsProps> = ({
         onClick={onNewTab}
         aria-label="Yeni Belge Aç"
         title="Yeni Belge Aç / Ekle"
-        className="p-1.5 rounded-lg hover:bg-slate-800/60 text-slate-400 hover:text-slate-200 border border-transparent hover:border-slate-700/40 transition-all shrink-0 ml-1"
+        className="doc-tab-add-btn"
       >
-        <Plus className="w-3.5 h-3.5" />
+        <Plus size={14} />
       </button>
     </div>
   );

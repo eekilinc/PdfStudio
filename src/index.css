@@ -341,3 +341,118 @@ body {
     display: none !important;
   }
 }
+
+/* Document Tabs Bar (Multi-Tab PDF Navigation) */
+.doc-tabs-bar {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px;
+  padding: 0 12px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+  overflow-x: auto;
+  min-height: 38px;
+  max-height: 38px;
+  flex-shrink: 0;
+  z-index: 90;
+}
+
+.doc-tabs-list {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.doc-tab-item {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  background-color: transparent;
+  max-width: 220px;
+  flex-shrink: 0;
+}
+
+.doc-tab-item:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.doc-tab-item.active {
+  background-color: var(--bg-primary);
+  color: var(--accent-primary);
+  border-color: var(--border-color);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+}
+
+.doc-tab-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.doc-tab-dirty-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #f59e0b;
+  flex-shrink: 0;
+}
+
+.doc-tab-close-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-left: 2px;
+  transition: all 0.12s ease;
+  flex-shrink: 0;
+}
+
+.doc-tab-close-btn:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.doc-tab-add-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.doc-tab-add-btn:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
