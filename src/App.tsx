@@ -24,7 +24,7 @@ import { PDFViewer } from './components/PDFViewer';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { SearchBar } from './components/SearchBar';
 
-import { CheckCircle2, AlertCircle, Info, ChevronLeft, ChevronRight, Minimize2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, ChevronLeft, ChevronRight, Minimize2, FilePlus } from 'lucide-react';
 
 // Lazy-loaded modals & components to optimize initial bundle size & load on demand
 const SignatureModal = lazy(() => import('./components/SignatureModal').then(m => ({ default: m.SignatureModal })));
@@ -143,6 +143,7 @@ export function App() {
 
   const [pendingImageData, setPendingImageData] = useState<string | null>(null);
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [toast, setToast] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
 
   const showToast = (text: string, type: 'success' | 'info' | 'error' = 'success') => {
@@ -209,8 +210,33 @@ export function App() {
   };
 
   // Helper to parse PDF ArrayBuffer and build page states instantaneously
-  const parseAndSetPdf = async (arrayBuffer: ArrayBuffer, filename: string, fileSize: number) => {
+  const parseAndSetPdf = async (
+    arrayBuffer: ArrayBuffer,
+    filename: string,
+    fileSize: number,
+    filePath?: string | null
+  ) => {
     try {
+      // Sync active tab state before switching/adding a new tab
+      if (docState.data && activeTabId) {
+        updateActiveTabDoc(docState, isDirty, currentPageIndex);
+      }
+
+      const resolvedFilePath = filePath !== undefined ? filePath : currentFilePath;
+
+      // Check if this exact file is already open in another tab
+      const existingTab = tabs.find(
+        (t) =>
+          (resolvedFilePath && t.filePath === resolvedFilePath) ||
+          (!resolvedFilePath && t.filename === filename && t.docState.fileSize === fileSize)
+      );
+
+      if (existingTab) {
+        handleSelectTab(existingTab.id);
+        showToast(`Sekmeye geçildi: ${filename}`, 'info');
+        return;
+      }
+
       clearPdfCache();
       const pdf = await getSharedPdfDoc(arrayBuffer);
       if (!pdf) throw new Error('PDF yüklenemedi');
@@ -254,7 +280,8 @@ export function App() {
       setSearchMatches([]);
       setActiveMatchIndex(-1);
       setIsDirty(false);
-      addTab(filename, currentFilePath, initialDoc);
+      setCurrentFilePath(resolvedFilePath);
+      addTab(filename, resolvedFilePath, initialDoc);
     } catch (err) {
       console.error('PDF parsing error:', err);
       showToast('PDF dosyası açılırken bir hata oluştu.', 'error');
@@ -266,7 +293,7 @@ export function App() {
       const sampleBytes = await createSamplePdf();
       const buffer = sampleBytes.buffer.slice(sampleBytes.byteOffset, sampleBytes.byteOffset + sampleBytes.byteLength);
       setCurrentFilePath(null);
-      await parseAndSetPdf(buffer as ArrayBuffer, 'Ornek_Sozlesme_Sablonu.pdf', sampleBytes.byteLength);
+      await parseAndSetPdf(buffer as ArrayBuffer, 'Ornek_Sozlesme_Sablonu.pdf', sampleBytes.byteLength, null);
     } catch (e) {
       console.error('Failed to create sample PDF:', e);
     }
@@ -275,11 +302,10 @@ export function App() {
   const handleOpenPdfFile = async (file: File) => {
     const arrayBuffer = await file.arrayBuffer();
     const filePath = (file as any).path || null;
-    setCurrentFilePath(filePath);
     if (filePath) {
       addToRecentFiles(file.name, filePath);
     }
-    await parseAndSetPdf(arrayBuffer, file.name, file.size);
+    await parseAndSetPdf(arrayBuffer, file.name, file.size, filePath);
     showToast(`Açıldı: ${file.name}`, 'info');
   };
 
@@ -293,7 +319,7 @@ export function App() {
         const filename = startupPath.split(/[\\/]/).pop() || 'Belge.pdf';
         setCurrentFilePath(startupPath);
         addToRecentFiles(filename, startupPath);
-        await parseAndSetPdf(buffer, filename, fileBytes.length);
+        await parseAndSetPdf(buffer, filename, fileBytes.length, startupPath);
         return;
       }
     } catch {
@@ -321,26 +347,45 @@ export function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Native window Drag & Drop listener for PDFs
+  // Native window Drag & Drop listener for PDFs (Opens dropped file(s) in a new tab)
   useEffect(() => {
     const handleDragOver = (e: DragEvent) => {
       e.preventDefault();
+      if (e.dataTransfer && e.dataTransfer.types.includes('Files')) {
+        setIsDraggingFile(true);
+      }
     };
 
-    const handleDrop = (e: DragEvent) => {
+    const handleDragLeave = (e: DragEvent) => {
       e.preventDefault();
-      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
-        const file = e.dataTransfer.files[0];
-        if (file.name.toLowerCase().endsWith('.pdf')) {
-          handleOpenPdfFile(file);
+      if (e.relatedTarget === null) {
+        setIsDraggingFile(false);
+      }
+    };
+
+    const handleDrop = async (e: DragEvent) => {
+      e.preventDefault();
+      setIsDraggingFile(false);
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const files = Array.from(e.dataTransfer.files);
+        const pdfFiles = files.filter((f) => f.name.toLowerCase().endsWith('.pdf'));
+        if (pdfFiles.length === 0) {
+          showToast('Lütfen geçerli bir PDF dosyası bırakın.', 'error');
+          return;
+        }
+
+        for (const file of pdfFiles) {
+          await handleOpenPdfFile(file);
         }
       }
     };
 
     window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('dragleave', handleDragLeave);
     window.addEventListener('drop', handleDrop);
     return () => {
       window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('dragleave', handleDragLeave);
       window.removeEventListener('drop', handleDrop);
     };
   }, []);
@@ -399,7 +444,7 @@ export function App() {
       const blankBytes = await createBlankPdf();
       const buffer = blankBytes.buffer.slice(blankBytes.byteOffset, blankBytes.byteOffset + blankBytes.byteLength);
       setCurrentFilePath(null);
-      await parseAndSetPdf(buffer as ArrayBuffer, 'Yeni_Belge.pdf', blankBytes.byteLength);
+      await parseAndSetPdf(buffer as ArrayBuffer, 'Yeni_Belge.pdf', blankBytes.byteLength, null);
       showToast('✓ Yeni boş belge oluşturuldu', 'info');
     } catch (err) {
       console.error('Blank PDF error:', err);
@@ -414,7 +459,7 @@ export function App() {
       const filename = path.split(/[\\/]/).pop() || 'Belge.pdf';
       setCurrentFilePath(path);
       addToRecentFiles(filename, path);
-      await parseAndSetPdf(buffer, filename, fileBytes.length);
+      await parseAndSetPdf(buffer, filename, fileBytes.length, path);
       showToast(`Açıldı: ${filename}`, 'info');
     } catch (err) {
       console.error('Failed to open recent file:', err);
@@ -442,7 +487,7 @@ export function App() {
         const filename = chosenPath.split(/[\\/]/).pop() || 'Belge.pdf';
         setCurrentFilePath(chosenPath);
         addToRecentFiles(filename, chosenPath);
-        await parseAndSetPdf(buffer, filename, fileBytes.length);
+        await parseAndSetPdf(buffer, filename, fileBytes.length, chosenPath);
         showToast(`Açıldı: ${filename}`, 'info');
       }
     } catch (err) {
@@ -977,6 +1022,65 @@ export function App() {
           {toast.type === 'error' && <AlertCircle size={16} />}
           {toast.type === 'info' && <Info size={16} />}
           <span>{toast.text}</span>
+        </div>
+      )}
+
+      {/* Drag & Drop Visual Overlay */}
+      {isDraggingFile && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99999,
+            backgroundColor: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+            border: '3px dashed var(--accent-primary)',
+            margin: '8px',
+            borderRadius: 'var(--radius-lg)',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '24px 36px',
+              borderRadius: 'var(--radius-lg)',
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border-color)',
+              boxShadow: 'var(--shadow-lg)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            <div
+              style={{
+                width: '56px',
+                height: '56px',
+                borderRadius: '50%',
+                background: 'var(--accent-gradient)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: 'var(--shadow-glow)',
+              }}
+            >
+              <FilePlus size={28} color="#ffffff" />
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 700 }}>
+              PDF Belgesini Bırakın
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+              Dosya yeni sekmede anında açılacaktır
+            </div>
+          </div>
         </div>
       )}
 
