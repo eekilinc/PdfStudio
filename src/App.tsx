@@ -903,6 +903,29 @@ export function App() {
     }
   };
 
+  // Tab Navigation Handlers for Keyboard Shortcuts
+  const handleCloseActiveTab = () => {
+    if (activeTabId) {
+      handleCloseTab(activeTabId, { stopPropagation: () => {} } as React.MouseEvent);
+    }
+  };
+
+  const handleNextTab = () => {
+    if (tabs.length <= 1) return;
+    const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
+    if (currentIndex === -1) return;
+    const nextIndex = (currentIndex + 1) % tabs.length;
+    handleSelectTab(tabs[nextIndex].id);
+  };
+
+  const handlePrevTab = () => {
+    if (tabs.length <= 1) return;
+    const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
+    if (currentIndex === -1) return;
+    const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    handleSelectTab(tabs[prevIndex].id);
+  };
+
   // Keep actions ref updated for window keyboard listener without rebinding
   const actionsRef = useRef({
     undo: handleUndo,
@@ -914,6 +937,9 @@ export function App() {
     selectedAnn: selectedAnnotation,
     hasDocData: !!docState.data,
     fullscreen: isFullscreen,
+    closeActiveTab: handleCloseActiveTab,
+    nextTab: handleNextTab,
+    prevTab: handlePrevTab,
   });
 
   useEffect(() => {
@@ -927,6 +953,9 @@ export function App() {
       selectedAnn: selectedAnnotation,
       hasDocData: !!docState.data,
       fullscreen: isFullscreen,
+      closeActiveTab: handleCloseActiveTab,
+      nextTab: handleNextTab,
+      prevTab: handlePrevTab,
     };
   });
 
@@ -934,6 +963,22 @@ export function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const act = actionsRef.current;
+      // Close active tab (Ctrl+W)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w') {
+        e.preventDefault();
+        act.closeActiveTab();
+        return;
+      }
+      // Switch between tabs (Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+PageDown, Ctrl+PageUp)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'Tab' || e.key === 'PageDown' || e.key === 'PageUp')) {
+        e.preventDefault();
+        if (e.shiftKey || e.key === 'PageUp') {
+          act.prevTab();
+        } else {
+          act.nextTab();
+        }
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsCommandPaletteOpen((prev) => !prev);

@@ -33,11 +33,12 @@
   - [1. Doğrudan PDF Metin Düzenleme & Akıllı OCR](#1-doğrudan-pdf-metin-düzenleme--akıllı-ocr)
   - [2. Askeri Düzeyde AES-256 Şifreleme & İzin Yönetimi](#2-askeri-düzeyde-aes-256-şifreleme--izin-yönetimi)
   - [3. Çizim, Vurgulama, Dijital İmza, Damga & Cetvel](#3-çizim-vurgulama-dijital-imza-damga--cetvel)
-  - [4. Gelişmiş Belge & Sayfa Yönetimi (Split & Merge)](#4-gelişmiş-belge--sayfa-yönetimi-split--merge)
-  - [5. Çok Formatlı Ofis Dışa Aktarım Merkezi](#5-çok-formatlı-ofis-dışa-aktarım-merkezi)
-  - [6. Çift PDF Yan Yana Karşılaştırma (Side-by-Side Diff)](#6-çift-pdf-yan-yana-karşılaştırma-side-by-side-diff)
-  - [7. Boyut Küçültme (Compress) & Hassas Veri Karartma (Redact)](#7-boyut-küçültme-compress--hassas-veri-karartma-redact)
-  - [8. Komut Paleti, Belge Özellikleri, Durum Çubuğu & Sunum Modu](#8-komut-paleti-belge-özellikleri-durum-çubuğu--sunum-modu)
+  - [4. Çoklu Sekme Sistemi & Akıllı Sürükle-Bırak](#4-çoklu-sekme-sistemi--akıllı-sürükle-bırak-multi-document-tabs)
+  - [5. Gelişmiş Belge & Sayfa Yönetimi (Split & Merge)](#5-gelişmiş-belge--sayfa-yönetimi-split--merge)
+  - [6. Çok Formatlı Ofis Dışa Aktarım Merkezi](#6-yüksek-sadakatli-ofis--format-dışa-aktarım-merkezi)
+  - [7. Çift PDF Yan Yana Karşılaştırma (Side-by-Side Diff)](#7-çift-pdf-yan-yana-karşılaştırma-side-by-side-diff)
+  - [8. Boyut Küçültme (Compress) & Hassas Veri Karartma (Redact)](#8-boyut-küçültme-compress--hassas-veri-karartma-redact)
+  - [9. Komut Paleti, Belge Özellikleri, Durum Çubuğu & Sunum Modu](#9-komut-paleti-belge-özellikleri-durum-çubuğu--sunum-modu)
 - [🏗️ Sistem Mimarisi & Veri Akışı](#️-sistem-mimarisi--veri-akışı)
 - [⚡ Performans & Kod Bölümleme (Code Splitting)](#-performans--kod-bölümleme-code-splitting)
 - [⌨️ Klavye Kısayolları](#️-klavye-kısayolları)
@@ -71,7 +72,13 @@
 - **Teknik Ölçüm Cetveli (Ruler):** Plan ve mimari paftalar üzerinde iki nokta arasındaki net mesafeyi (`cm`, `mm`, `inç`) hassas hesaplayın.
 - **Tıklanabilir Onay Kutusu (Checkbox):** Etkileşimli `☑` / `☐` kontrol kutuları yerleştirin.
 
-### 4. Gelişmiş Belge & Sayfa Yönetimi (Split & Merge)
+### 4. Çoklu Sekme Sistemi & Akıllı Sürükle-Bırak (Multi-Document Tabs)
+- **Çoklu Belge Sekmeleri:** Tarayıcı rahatlığında birden fazla PDF'i aynı oturumda sekmeler halinde açık tutun, aralarında anında geçiş yapın.
+- **Kesintisiz Durum Koruması:** Her sekme kendi sayfa konumunu, zoom oranını ve üzerinde çalıştığınız çizim/notları bağımsız olarak hafızasında saklar.
+- **Kaydedilmemiş Değişiklik Göstergesi:** Düzenlenen belgeler sekme başlığında sarı nokta (`•`) ile uyarır, yanlışlıkla kapatmayı önler.
+- **Yerel Sürükle-Bırak (Native Drag & Drop):** Masaüstünden veya herhangi bir klasörden PDF dosyalarını pencereye sürükleyin; parlayan görsel rehber katmanı eşliğinde dosyalarınız **otomatik olarak yeni sekmede** açılır.
+
+### 5. Gelişmiş Belge & Sayfa Yönetimi (Split & Merge)
 - **PDF Bölme (Split):**
   - Sayfa aralığı çıkarma (`1-3, 5, 8-12`).
   - Her sayfayı ayrı birer PDF yapma.
@@ -81,7 +88,7 @@
 - **Görsel Sayfa Sıralama (Thumbnail Sidebar):** Sayfaları sürükleyip bırakarak taşıyın, 90° döndürün, çoğaltın veya silin.
 - **Sayfa Numaralandırma & Filigran:** Tek tıkla altbilgi/üstbilgi formatlarında sayfa numarası ve yarı saydam filigran ekleyin.
 
-### 5. Yüksek Sadakatli Ofis & Format Dışa Aktarım Merkezi
+### 6. Yüksek Sadakatli Ofis & Format Dışa Aktarım Merkezi
 | Format | Uzantı | Açıklama |
 |---|---|---|
 | **Microsoft Word** | `.docx` | Gerçek OpenXML ikili formatı; H1/H2/H3 başlık hiyerarşisi, gerçek kenarlıklı Word tabloları ve madde listeleri oluşturur. |
@@ -93,14 +100,14 @@
 | **Web Sayfası** | `.html` | Responsive kart tasarımı ve tablo görünümü sunan bağımsız web sayfası. |
 | **Görsel Paketi** | `.png / .jpg` | Sayfaları yüksek çözünürlüklü raster görsel formatında dışa aktarır. |
 
-### 6. Çift PDF Yan Yana Karşılaştırma (Side-by-Side Diff)
+### 7. Çift PDF Yan Yana Karşılaştırma (Side-by-Side Diff)
 - İki farklı revizyonu veya sözleşmeyi yan yana açarak **eşzamanlı kaydırma (synchronized scroll)** ile sayfa sayfa karşılaştırın.
 
-### 7. Boyut Küçültme (Compress) & Hassas Veri Karartma (Redact)
+### 8. Boyut Küçültme (Compress) & Hassas Veri Karartma (Redact)
 - **PDF Sıkıştırma:** Düşük, Orta ve Yüksek sıkıştırma profilleriyle dosya boyutunu %80'e varan oranlarda küçültün.
 - **Kalıcı Karartma (Redaction):** TC Kimlik, IBAN, telefon gibi hassas kişisel verileri kalıcı siyah/beyaz bloklarla maskeleyip dışa aktarın.
 
-### 8. Komut Paleti, Belge Özellikleri, Durum Çubuğu & Sunum Modu
+### 9. Komut Paleti, Belge Özellikleri, Durum Çubuğu & Sunum Modu
 - **Raycast / Spotlight Hızlı Komut Paleti (`Ctrl+K`):** Menüler arasında kaybolmadan klavyeden arama yapın; tüm araçlar, dışa aktarım seçenekleri ve görünüm filtrelerine anında erişin.
 - **Belge Özellikleri & Metaveri Düzenleyici (`Ctrl+D`):** PDF versiyonu, kağıt ebatları, üretici motor gibi teknik detayları inceleyin; Başlık, Yazar, Konu ve Anahtar Kelimeler gibi PDF metaverilerini doğrudan düzenleyip kaydedin.
 - **Modern Alt Durum Çubuğu (Status Bar):** Aktif araç rozeti, sayfa numarası, milimetrik kağıt formatı (`A4 210 × 297 mm`), kayıt durumu (`Kaydedilmemiş` / `Kaydedildi`) ve hızlı yakınlaştırma ön ayarlarını alt bantta şık bir şekilde sunar.
@@ -171,6 +178,9 @@ Vite 8 ve React 19 mimarisi ile ağır modüller başlangıç paketinden ayrılm
 | <kbd>Ctrl</kbd> + <kbd>S</kbd> | **Doğrudan Kaydet** (Açılan dosyanın orijinal konumuna anında üzerine yazar) |
 | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd> | **Farklı Kaydet...** (Yerel Windows dosya seçici ile konum ve ad seç) |
 | <kbd>Ctrl</kbd> + <kbd>O</kbd> | **PDF Aç** (Yerel dosya penceresi) |
+| <kbd>Ctrl</kbd> + <kbd>W</kbd> | **Aktif Belge Sekmesini Kapat** |
+| <kbd>Ctrl</kbd> + <kbd>Tab</kbd> / <kbd>Ctrl</kbd> + <kbd>PageDown</kbd> | **Sonraki Belge Sekmesine Geç** |
+| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Tab</kbd> / <kbd>Ctrl</kbd> + <kbd>PageUp</kbd> | **Önceki Belge Sekmesine Geç** |
 | <kbd>Ctrl</kbd> + <kbd>Mouse Tekerleği</kbd> | **Akıllı Odaklı Yakınlaştırma / Uzaklaştırma** (%25 - %400) |
 | <kbd>Ctrl</kbd> + <kbd>Z</kbd> | **Geri Al** (Undo) |
 | <kbd>Ctrl</kbd> + <kbd>Y</kbd> / <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd> | **Yinele** (Redo) |
@@ -200,6 +210,7 @@ Vite 8 ve React 19 mimarisi ile ağır modüller başlangıç paketinden ayrılm
 - **Şifreleme Motoru:** `@pdfsmaller/pdf-encrypt` (Web Crypto AES-256 & RC4)
 - **OCR Motoru:** `tesseract.js 7.0` (Türkçe + İngilizce modelleri)
 - **İkon Seti & Tasarım:** Lucide React, Glassmorphism, Saf CSS Değişkenleri
+- **Otomatik Birim Testleri:** Vitest 5 + Happy-DOM (17 adet test süiti)
 - **Statik Kod Analizi:** Oxlint (Sıfır hata, sıfır uyarı)
 
 ---
