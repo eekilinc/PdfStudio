@@ -309,6 +309,21 @@ export function App() {
     showToast(`Açıldı: ${file.name}`, 'info');
   };
 
+  const handleOpenFilePath = async (path: string) => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const fileBytes = await invoke<number[]>('read_pdf_file', { path });
+      const buffer = new Uint8Array(fileBytes).buffer;
+      const filename = path.split(/[\\/]/).pop() || 'Belge.pdf';
+      addToRecentFiles(filename, path);
+      await parseAndSetPdf(buffer, filename, fileBytes.length, path);
+      showToast(`Açıldı: ${filename}`, 'info');
+    } catch (err) {
+      console.error('Failed to open file path:', err);
+      showToast('Dosya açılamadı veya taşınmış olabilir: ' + path, 'error');
+    }
+  };
+
   const loadStartupFileOrSample = async () => {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
@@ -349,6 +364,44 @@ export function App() {
 
   // Native window Drag & Drop listener for PDFs (Opens dropped file(s) in a new tab)
   useEffect(() => {
+    let unlistenTauriDragDrop: (() => void) | null = null;
+
+    // 1. Listen for Tauri 2 Native Window Drag & Drop Events (Required for Windows/Tauri desktop)
+    const setupTauriDragDrop = async () => {
+      try {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        const currentWin = getCurrentWindow();
+        if (currentWin && typeof currentWin.onDragDropEvent === 'function') {
+          unlistenTauriDragDrop = await currentWin.onDragDropEvent(async (event) => {
+            const payload = event.payload;
+            if (payload.type === 'over' || payload.type === 'enter') {
+              setIsDraggingFile(true);
+            } else if (payload.type === 'leave') {
+              setIsDraggingFile(false);
+            } else if (payload.type === 'drop') {
+              setIsDraggingFile(false);
+              const paths = payload.paths;
+              if (paths && paths.length > 0) {
+                const pdfPaths = paths.filter((p) => p.toLowerCase().endsWith('.pdf'));
+                if (pdfPaths.length === 0) {
+                  showToast('Lütfen geçerli bir PDF dosyası bırakın.', 'error');
+                  return;
+                }
+                for (const pdfPath of pdfPaths) {
+                  await handleOpenFilePath(pdfPath);
+                }
+              }
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('Tauri onDragDropEvent listener could not be registered (fallback to HTML5):', err);
+      }
+    };
+
+    void setupTauriDragDrop();
+
+    // 2. Standard HTML5 Drag & Drop Fallback
     const handleDragOver = (e: DragEvent) => {
       e.preventDefault();
       if (e.dataTransfer && e.dataTransfer.types.includes('Files')) {
@@ -384,6 +437,9 @@ export function App() {
     window.addEventListener('dragleave', handleDragLeave);
     window.addEventListener('drop', handleDrop);
     return () => {
+      if (unlistenTauriDragDrop) {
+        unlistenTauriDragDrop();
+      }
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('dragleave', handleDragLeave);
       window.removeEventListener('drop', handleDrop);
@@ -451,21 +507,7 @@ export function App() {
     }
   };
 
-  const handleOpenRecentFile = async (path: string) => {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const fileBytes = await invoke<number[]>('read_pdf_file', { path });
-      const buffer = new Uint8Array(fileBytes).buffer;
-      const filename = path.split(/[\\/]/).pop() || 'Belge.pdf';
-      setCurrentFilePath(path);
-      addToRecentFiles(filename, path);
-      await parseAndSetPdf(buffer, filename, fileBytes.length, path);
-      showToast(`Açıldı: ${filename}`, 'info');
-    } catch (err) {
-      console.error('Failed to open recent file:', err);
-      showToast('Dosya açılamadı veya taşınmış olabilir: ' + path, 'error');
-    }
-  };
+  const handleOpenRecentFile = (path: string) => handleOpenFilePath(path);
 
   const handleCloseDocument = () => {
     setDocState(INITIAL_DOC_STATE);
