@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import type { 
   PDFDocumentState, 
   ActiveToolConfig, 
@@ -12,6 +12,9 @@ import type {
 import { getSharedPdfDoc, clearPdfCache } from './utils/pdfInit';
 import { createSamplePdf } from './utils/samplePdf';
 import { exportModifiedPdf, createBlankPdf } from './utils/pdfExport';
+import { usePdfHistory } from './hooks/usePdfHistory';
+import { useDocumentTabs } from './hooks/useDocumentTabs';
+import { DocumentTabs } from './components/DocumentTabs';
 
 import { Header } from './components/Header';
 import { Toolbar } from './components/Toolbar';
@@ -70,8 +73,8 @@ export function App() {
     return s.defaultZoom || 1.0;
   });
 
-  // Document State
-  const [docState, setDocState] = useState<PDFDocumentState>({
+  // Document State & Undo / Redo History via Custom Hook
+  const INITIAL_DOC_STATE: PDFDocumentState = {
     filename: '',
     fileSize: 0,
     data: null,
@@ -79,13 +82,32 @@ export function App() {
     pages: [],
     pageOrder: [],
     annotations: {},
-  });
+  };
+
+  const {
+    docState,
+    setDocState,
+    initHistory,
+    updateDocWithHistory,
+    canUndo,
+    canRedo,
+    undo,
+    redo,
+    resetHistory,
+  } = usePdfHistory(INITIAL_DOC_STATE);
+
+  // Multi-Document Tabs Management
+  const {
+    tabs,
+    setTabs,
+    activeTabId,
+    setActiveTabId,
+    addTab,
+    updateActiveTabDoc,
+    clearAllTabs,
+  } = useDocumentTabs();
 
   const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
-
-  // Undo / Redo History
-  const [history, setHistory] = useState<PDFDocumentState[]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number>(-1);
 
   // Search State
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -226,13 +248,13 @@ export function App() {
       };
 
       setDocState(initialDoc);
-      setHistory([initialDoc]);
-      setHistoryIndex(0);
+      initHistory(initialDoc);
       setCurrentPageIndex(0);
       setSelectedAnnotation(null);
       setSearchMatches([]);
       setActiveMatchIndex(-1);
       setIsDirty(false);
+      addTab(filename, currentFilePath, initialDoc);
     } catch (err) {
       console.error('PDF parsing error:', err);
       showToast('PDF dosyası açılırken bir hata oluştu.', 'error');
@@ -323,19 +345,54 @@ export function App() {
     };
   }, []);
 
-  // Helper to commit state into Undo/Redo stack
-  const updateDocWithHistory = useCallback((updater: (prev: PDFDocumentState) => PDFDocumentState) => {
-    setDocState((prev) => {
-      const nextState = updater(prev);
-      setHistory((prevHist) => {
-        const sliced = prevHist.slice(0, historyIndex + 1);
-        return [...sliced, nextState];
-      });
-      setHistoryIndex((prevIdx) => prevIdx + 1);
-      setIsDirty(true);
-      return nextState;
-    });
-  }, [historyIndex]);
+  // Sync active tab with docState, isDirty and currentPageIndex changes
+  useEffect(() => {
+    if (docState.data && activeTabId) {
+      updateActiveTabDoc(docState, isDirty, currentPageIndex);
+    }
+  }, [docState, isDirty, currentPageIndex, activeTabId, updateActiveTabDoc]);
+
+  // Tab Selection Handler
+  const handleSelectTab = (tabId: string) => {
+    if (tabId === activeTabId) return;
+    const targetTab = tabs.find((t) => t.id === tabId);
+    if (!targetTab) return;
+
+    setActiveTabId(tabId);
+    setDocState(targetTab.docState);
+    setCurrentPageIndex(targetTab.currentPageIndex);
+    setCurrentFilePath(targetTab.filePath);
+    initHistory(targetTab.docState);
+    setSelectedAnnotation(null);
+    setSearchMatches([]);
+    setActiveMatchIndex(-1);
+  };
+
+  // Tab Close Handler
+  const handleCloseTab = (tabId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const tabToClose = tabs.find((t) => t.id === tabId);
+    if (tabToClose?.isDirty) {
+      const confirmClose = window.confirm(`"${tabToClose.filename}" belgesinde kaydedilmemiş değişiklikler var. Yine de kapatmak istiyor musunuz?`);
+      if (!confirmClose) return;
+    }
+
+    const remainingTabs = tabs.filter((t) => t.id !== tabId);
+    setTabs(remainingTabs);
+
+    if (activeTabId === tabId) {
+      if (remainingTabs.length > 0) {
+        const nextTab = remainingTabs[remainingTabs.length - 1];
+        setActiveTabId(nextTab.id);
+        setDocState(nextTab.docState);
+        setCurrentPageIndex(nextTab.currentPageIndex);
+        setCurrentFilePath(nextTab.filePath);
+        initHistory(nextTab.docState);
+      } else {
+        handleCloseDocument();
+      }
+    }
+  };
 
   const handleCreateBlankPdf = async () => {
     try {
@@ -366,19 +423,11 @@ export function App() {
   };
 
   const handleCloseDocument = () => {
-    setDocState({
-      filename: '',
-      fileSize: 0,
-      data: null,
-      numPages: 0,
-      pages: [],
-      pageOrder: [],
-      annotations: {},
-    });
+    setDocState(INITIAL_DOC_STATE);
     setCurrentFilePath(null);
     setSelectedAnnotation(null);
-    setHistory([]);
-    setHistoryIndex(-1);
+    resetHistory();
+    clearAllTabs();
     setSearchMatches([]);
     setActiveMatchIndex(-1);
   };
@@ -412,21 +461,11 @@ export function App() {
 
   // Undo / Redo Handlers
   const handleUndo = () => {
-    if (historyIndex > 0) {
-      const targetIndex = historyIndex - 1;
-      setDocState(history[targetIndex]);
-      setHistoryIndex(targetIndex);
-      setSelectedAnnotation(null);
-    }
+    undo(() => setSelectedAnnotation(null));
   };
 
   const handleRedo = () => {
-    if (historyIndex < history.length - 1) {
-      const targetIndex = historyIndex + 1;
-      setDocState(history[targetIndex]);
-      setHistoryIndex(targetIndex);
-      setSelectedAnnotation(null);
-    }
+    redo(() => setSelectedAnnotation(null));
   };
 
   // Direct Save Handler (Ctrl+S) - Overwrites opened file seamlessly or prompts Save As
@@ -957,8 +996,8 @@ export function App() {
           onPrint={handlePrint}
           onUndo={handleUndo}
           onRedo={handleRedo}
-          canUndo={historyIndex > 0}
-          canRedo={historyIndex < history.length - 1}
+          canUndo={canUndo}
+          canRedo={canRedo}
           zoom={zoom}
           onZoomChange={setZoom}
           onFitWidth={handleFitWidth}
@@ -987,6 +1026,17 @@ export function App() {
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
           isFullscreen={isFullscreen}
           onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
+        />
+      )}
+
+      {/* Multi-Document Tab Bar */}
+      {!isFullscreen && tabs.length > 0 && docState.data && (
+        <DocumentTabs
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onSelectTab={handleSelectTab}
+          onCloseTab={handleCloseTab}
+          onNewTab={handleOpenNativePdf}
         />
       )}
 
