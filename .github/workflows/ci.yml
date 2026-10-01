@@ -26,7 +26,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22, not 20: pdf.js 6 uses the Iterator Helpers proposal
+          # (`Iterator.prototype.join`), which does not exist in Node 20. The
+          # four suites that import the library transitively failed to load on
+          # 20 while passing everywhere else.
+          node-version: 22
           cache: 'npm'
 
       - name: Install dependencies

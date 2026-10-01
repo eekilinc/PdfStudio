@@ -25,7 +25,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22, not 20: pdf.js 6 uses the Iterator Helpers proposal, which does
+          # not exist in Node 20. The build happened to survive it because Vite
+          # targets browsers, not the build host, but the test step would not.
+          node-version: 22
           cache: 'npm'
 
       - name: Sync Project Version from Tag
