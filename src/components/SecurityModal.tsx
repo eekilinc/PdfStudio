@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Lock, Shield, Eye, EyeOff, Check, Loader2, KeyRound, Sliders } from 'lucide-react';
 import { encryptPDF } from '@pdfsmaller/pdf-encrypt';
 import { exportModifiedPdf } from '../utils/pdfExport';
+import { writeBinaryFile } from '../utils/ipc';
 import type { PDFDocumentState } from '../types/pdf';
 
 interface SecurityModalProps {
@@ -67,10 +68,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({ isOpen, onClose, d
         const { invoke } = await import('@tauri-apps/api/core');
         const chosenPath = await invoke<string | null>('pick_save_pdf_path', { defaultName });
         if (chosenPath) {
-          await invoke('write_pdf_file', {
-            path: chosenPath,
-            contents: Array.from(encryptedBytes),
-          });
+          await writeBinaryFile(chosenPath, encryptedBytes);
           savedViaTauri = true;
           onClose();
         } else {

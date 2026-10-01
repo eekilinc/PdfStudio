@@ -20,6 +20,17 @@ import type {
   ReaderFilter
 } from '../types/pdf';
 import { getSharedPdfDoc } from '../utils/pdfInit';
+import { detectVisibleContent } from '../utils/blankPage';
+import { inferFontStyle } from '../utils/fontInference';
+import { displaySize, displayToUnrotated, unrotatedToDisplay } from '../utils/pageGeometry';
+import { nextAnnotationId } from '../utils/ids';
+import {
+  hitResizeCorner,
+  resizeBox,
+  isResizable,
+  RESIZE_HIT_SLOP_PX,
+  type ResizeCorner,
+} from '../utils/annotationGeometry';
 
 interface PDFViewerProps {
   docState: PDFDocumentState;
@@ -58,6 +69,16 @@ const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4.0;
 /** Scale change applied per wheel notch. */
 const ZOOM_STEP = 0.12;
+
+/**
+ * Upper bound on one page's canvas, in device pixels and in device ratio.
+ *
+ * Without a cap, 4x zoom on a HiDPI display asks for a canvas of tens of
+ * megapixels per page, and there are two per page. A hundred-page document then
+ * cannot be held in memory at all.
+ */
+const MAX_CANVAS_PIXELS = 8_000_000;
+const MAX_CANVAS_DPR = 2.5;
 
 /**
  * Shared empty annotation list.
@@ -372,31 +393,29 @@ interface PageItemProps {
  */
 const ERASE_GESTURE = 'erase';
 
-function detectFontProperties(fontName?: string) {
-  if (!fontName) {
-    return { fontFamily: 'Inter, sans-serif', fontWeight: 'normal' as const, fontStyle: 'normal' as const };
-  }
-  const lower = fontName.toLowerCase();
-  const isBold = lower.includes('bold') || lower.includes('black') || lower.includes('heavy') || lower.includes('b') || lower.includes('cmbx') || lower.includes('cmb');
-  const isItalic = lower.includes('italic') || lower.includes('oblique') || lower.includes('i') || lower.includes('cmti') || lower.includes('cmmi');
+/**
+ * Stretch the free endpoint of a line or arrow to match a resized box.
+ *
+ * A line stores `endX`/`endY` alongside its box, so scaling the box alone leaves
+ * the line itself unchanged and the user sees nothing move. The endpoint is
+ * scaled by the same factors the box changed by, measured from the box origin.
+ */
+function rescaleEndpoints(
+  ann: Annotation,
+  origin: { x: number; y: number; width: number; height: number },
+  next: { x: number; y: number; width: number; height: number },
+): { endX: number; endY: number } {
+  const shape = ann as ShapeAnnotation;
+  const endX = shape.endX ?? shape.x + shape.width;
+  const endY = shape.endY ?? shape.y + shape.height;
 
-  let fontFamily = 'Georgia, "Times New Roman", serif';
-  if (lower.includes('times') || lower.includes('serif') || lower.includes('cambria') || lower.includes('georgia') || lower.includes('minion') || lower.includes('cmr')) {
-    fontFamily = 'Georgia, "Times New Roman", serif';
-  } else if (lower.includes('courier') || lower.includes('mono') || lower.includes('consolas') || lower.includes('typewriter') || lower.includes('cmtt')) {
-    fontFamily = 'JetBrains Mono, monospace';
-  } else if (lower.includes('arial') || lower.includes('helvetica') || lower.includes('cmss') || lower.includes('sans')) {
-    fontFamily = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  } else if (lower.includes('roboto')) {
-    fontFamily = 'Roboto, sans-serif';
-  } else if (lower.includes('garamond')) {
-    fontFamily = 'Garamond, serif';
-  }
+  // Guarded so a collapsed box cannot divide by zero.
+  const sx = origin.width > 0.001 ? (endX - origin.x) / origin.width : 0;
+  const sy = origin.height > 0.001 ? (endY - origin.y) / origin.height : 0;
 
   return {
-    fontFamily,
-    fontWeight: (isBold ? 'bold' : 'normal') as 'bold' | 'normal',
-    fontStyle: (isItalic ? 'italic' : 'normal') as 'italic' | 'normal',
+    endX: next.x + sx * next.width,
+    endY: next.y + sy * next.height,
   };
 }
 
@@ -464,15 +483,25 @@ const PageItemImpl: React.FC<PageItemProps> = ({
   const [renderTrigger, setRenderTrigger] = useState(0);
   const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
 
-  const getPixelColorsAt = (canvas: HTMLCanvasElement | null, pdfX: number, pdfY: number, width: number, height: number): { bg: string; fg: string } => {
+  /**
+   * Sample the rendered page behind a point, to pick a matching text colour.
+   *
+   * `pdfX`/`pdfY` arrive in unrotated page space while the canvas holds the
+   * displayed page, so the point is mapped across and scaled by the canvas's own
+   * device ratio. Skipping that step sampled the wrong pixel on a turned page,
+   * which is how an edit on a rotated page could end up with unreadable text.
+   */
+  const getPixelColorsAt = (canvas: HTMLCanvasElement | null, pdfX: number, pdfY: number): { bg: string; fg: string } => {
     if (!canvas) return { bg: '#ffffff', fg: '#0f172a' };
     try {
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) return { bg: '#ffffff', fg: '#0f172a' };
-      const scaleX = canvas.width / width;
-      const scaleY = canvas.height / height;
-      const sampleX = Math.max(0, Math.min(canvas.width - 1, Math.floor((pdfX - 2) * scaleX)));
-      const sampleY = Math.max(0, Math.min(canvas.height - 1, Math.floor((pdfY - 2) * scaleY)));
+      if (!ctx || canvas.width === 0 || canvas.height === 0) return { bg: '#ffffff', fg: '#0f172a' };
+
+      const displayPoint = unrotatedToDisplay({ x: pdfX, y: pdfY }, unrotatedSize, pageRotation);
+      const scaleX = canvas.width / display.width;
+      const scaleY = canvas.height / display.height;
+      const sampleX = Math.max(0, Math.min(canvas.width - 1, Math.floor(displayPoint.x * scaleX)));
+      const sampleY = Math.max(0, Math.min(canvas.height - 1, Math.floor(displayPoint.y * scaleY)));
       const pixel = ctx.getImageData(sampleX, sampleY, 1, 1).data;
       const r = pixel[0] ?? 0;
       const g = pixel[1] ?? 0;
@@ -495,6 +524,13 @@ const PageItemImpl: React.FC<PageItemProps> = ({
   const [isDraggingAnn, setIsDraggingAnn] = useState(false);
   const [dragStartOffset, setDragStartOffset] = useState<Point>({ x: 0, y: 0 });
   const [isMouseDownOnOverlay, setIsMouseDownOnOverlay] = useState(false);
+  // True while the browser owns the pointer for a native text selection.
+  const [isSelectingText, setIsSelectingText] = useState(false);
+  // Which corner of the selected annotation is being dragged, if any.
+  const [resizeCorner, setResizeCorner] = useState<ResizeCorner | null>(null);
+  // Size at the moment the resize started, so the drag is computed from a fixed
+  // origin rather than accumulating rounding on every pointer move.
+  const resizeOrigin = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
 
   /**
    * Clear every latched interaction flag.
@@ -512,6 +548,12 @@ const PageItemImpl: React.FC<PageItemProps> = ({
     setIsDrawing(false);
     setShapeStart(null);
     setCurrentShapePreview(null);
+    // Hand the pointer back to the canvas once the selection drag ends,
+    // otherwise the page stays unclickable for annotation tools.
+    setIsSelectingText(false);
+    // Closes the resize step so the next drag starts a fresh one.
+    setResizeCorner(null);
+    resizeOrigin.current = null;
   }, []);
 
   useEffect(() => {
@@ -534,8 +576,29 @@ const PageItemImpl: React.FC<PageItemProps> = ({
 
   const rawWidth = page.width && page.width > 50 ? page.width : 595.28;
   const rawHeight = page.height && page.height > 50 ? page.height : 841.89;
-  const pageWidth = Math.round(rawWidth * zoom);
-  const pageHeight = Math.round(rawHeight * zoom);
+  const pageRotation = page.rotation || 0;
+  // Annotation coordinates stay in unrotated page space, so the box the page is
+  // laid out in has to follow the *displayed* size. Sizing it from the
+  // unrotated dimensions while the canvas was rasterised rotated is what made
+  // a turned page render squashed.
+  const display = displaySize({ width: rawWidth, height: rawHeight }, pageRotation);
+  const pageWidth = Math.round(display.width * zoom);
+  const pageHeight = Math.round(display.height * zoom);
+  const unrotatedSize = { width: rawWidth, height: rawHeight };
+
+  /**
+   * Device pixels per CSS pixel, capped so one page cannot exhaust memory.
+   *
+   * At 4x zoom and a 2.5 device ratio an A4 page asks for a canvas of roughly
+   * 5950 x 8400 — about 200 MB per canvas, and there are two per page. Beyond
+   * the cap the page is still drawn at the right size on screen, just with a
+   * lower-resolution raster, which is invisible until the user is close enough to
+   * notice and is far better than a tab that will not allocate.
+   */
+  const pixelsPerCssPixel = Math.min(
+    Math.min(window.devicePixelRatio || 1, MAX_CANVAS_DPR),
+    Math.sqrt(MAX_CANVAS_PIXELS / Math.max(1, pageWidth * pageHeight)),
+  );
 
   useEffect(() => {
     const attach = registerRef(pageIndex);
@@ -549,9 +612,20 @@ const PageItemImpl: React.FC<PageItemProps> = ({
     const el = containerRef.current;
     if (!el) return;
 
+    // Two-way, not a one-way latch.
+    //
+    // The flag used to only ever go true, so scrolling through a document left
+    // every page holding two full-resolution canvases plus a text layer. On a
+    // hundred-page document that is gigabytes, and scrolling back up did not
+    // release anything. Releasing a page also drops its decoded images, so
+    // scrolling past and back re-renders it — the right trade, and it is what
+    // keeps memory proportional to the visible window rather than the document.
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) setIsVisible(true);
+        const entry = entries[0];
+        if (!entry) return;
+        setIsVisible(entry.isIntersecting);
+        if (!entry.isIntersecting) setPdfTextItems([]);
       },
       { rootMargin: '600px 0px' }
     );
@@ -568,15 +642,13 @@ const PageItemImpl: React.FC<PageItemProps> = ({
     const renderPdfPage = async () => {
       if (!isVisible || !bgCanvasRef.current) return;
 
-      const dpr = Math.min(window.devicePixelRatio || 2, 2.5);
-
       // Clean pure blank page
       if (page.isBlank || page.originalPageNumber === 0) {
         const canvas = bgCanvasRef.current;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          canvas.width = pageWidth * dpr;
-          canvas.height = pageHeight * dpr;
+          canvas.width = Math.max(1, Math.round(pageWidth * pixelsPerCssPixel));
+          canvas.height = Math.max(1, Math.round(pageHeight * pixelsPerCssPixel));
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
@@ -594,7 +666,12 @@ const PageItemImpl: React.FC<PageItemProps> = ({
         const pdfPage = await pdf.getPage(page.originalPageNumber);
         if (isCancelled || !bgCanvasRef.current) return;
 
-        const viewport = pdfPage.getViewport({ scale: zoom * dpr, rotation: page.rotation || 0 });
+        // The raster scale is the same capped one the overlay uses, so the two
+        // canvases stay pixel-aligned instead of drifting apart on large pages.
+        const viewport = pdfPage.getViewport({
+          scale: zoom * pixelsPerCssPixel,
+          rotation: pageRotation,
+        });
         const canvas = bgCanvasRef.current;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
@@ -623,31 +700,9 @@ const PageItemImpl: React.FC<PageItemProps> = ({
 
         await task.promise;
 
-        let hasDrawnContent = true;
-        try {
-          const w = canvas.width;
-          const h = canvas.height;
-          if (w > 0 && h > 0) {
-            const imgData = ctx.getImageData(0, 0, w, h).data;
-            let nonWhitePixels = 0;
-            // Step across the entire canvas (sample ~3000 points evenly)
-            const step = Math.max(16, Math.floor(imgData.length / 3000));
-            for (let i = 0; i < imgData.length; i += step) {
-              const r = imgData[i] ?? 0;
-              const g = imgData[i + 1] ?? 0;
-              const b = imgData[i + 2] ?? 0;
-              const a = imgData[i + 3] ?? 0;
-              // Non-white drawing (text, shapes, raster)
-              if (a > 30 && (r < 235 || g < 235 || b < 235)) {
-                nonWhitePixels++;
-                if (nonWhitePixels >= 8) break;
-              }
-            }
-            hasDrawnContent = nonWhitePixels >= 8;
-          }
-        } catch {
-          hasDrawnContent = true;
-        }
+        // Sampling rows rather than reading the whole canvas: the old version
+        // pulled megabytes of pixels per page per render purely to classify it.
+        const hasDrawnContent = detectVisibleContent(ctx, canvas.width, canvas.height);
 
         if (!isCancelled) {
           setHasVisibleCanvasContent(hasDrawnContent);
@@ -655,7 +710,7 @@ const PageItemImpl: React.FC<PageItemProps> = ({
         }
 
         const textContent = await pdfPage.getTextContent();
-        const unscaledViewport = pdfPage.getViewport({ scale: 1.0, rotation: page.rotation || 0 });
+        const unscaledViewport = pdfPage.getViewport({ scale: 1.0, rotation: pageRotation });
         const extracted: ExtractedPdfTextItem[] = [];
 
         textContent.items.forEach((item: any) => {
@@ -668,10 +723,10 @@ const PageItemImpl: React.FC<PageItemProps> = ({
           const canvasX = ptX;
           const canvasY = ptY - fontSize;
 
-          const { fontFamily, fontWeight, fontStyle } = detectFontProperties(item.fontName);
+          const { fontFamily, fontWeight, fontStyle } = inferFontStyle(item.fontName);
 
           extracted.push({
-            id: `text-${page.pageIndex}-${Math.random().toString(36).substring(2, 7)}`,
+            id: nextAnnotationId(`text-${page.pageIndex}`),
             str: item.str,
             x: Math.round(canvasX),
             y: Math.round(canvasY),
@@ -706,7 +761,7 @@ const PageItemImpl: React.FC<PageItemProps> = ({
         }
       }
     };
-  }, [docData, page.originalPageNumber, page.pageIndex, page.rotation, page.isBlank, zoom, isVisible, pageWidth, pageHeight]);
+  }, [docData, page.originalPageNumber, page.pageIndex, pageRotation, page.isBlank, zoom, isVisible, pageWidth, pageHeight, pixelsPerCssPixel]);
 
   // 2. Render Annotations & LIVE previews on Overlay Canvas
   useEffect(() => {
@@ -716,12 +771,21 @@ const PageItemImpl: React.FC<PageItemProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const dpr = Math.min(window.devicePixelRatio || 2, 2.5);
-    canvas.width = pageWidth * dpr;
-    canvas.height = pageHeight * dpr;
-    ctx.scale(dpr * zoom, dpr * zoom);
+    // Assigning width/height already clears the backing store, so no explicit
+    // clear is needed and the transform below can be set in one step.
+    const scale = pixelsPerCssPixel;
+    canvas.width = Math.max(1, Math.round(pageWidth * scale));
+    canvas.height = Math.max(1, Math.round(pageHeight * scale));
 
-    ctx.clearRect(0, 0, rawWidth, rawHeight);
+    // One unit is now one PDF point. Annotations are stored unrotated, so the
+    // rotation is applied here — about the centre of the displayed box — to
+    // match how the background page was rasterised.
+    ctx.setTransform(scale * zoom, 0, 0, scale * zoom, 0, 0);
+    if (pageRotation !== 0) {
+      ctx.translate(display.width / 2, display.height / 2);
+      ctx.rotate((pageRotation * Math.PI) / 180);
+      ctx.translate(-rawWidth / 2, -rawHeight / 2);
+    }
 
     // Draw Search Match Highlights
     const pageSearchMatches = searchMatches.filter((m) => m.pageIndex === page.pageIndex);
@@ -1081,15 +1145,22 @@ const PageItemImpl: React.FC<PageItemProps> = ({
       }
       ctx.restore();
     }
-  }, [annotations, selectedAnnotation, currentShapePreview, isDrawing, drawingPoints, zoom, editingTextId, activeConfig, pageWidth, pageHeight, rawWidth, rawHeight, searchMatches, activeMatchIndex, renderTrigger, shapeStart, isVisible, page.pageIndex]);
+  }, [annotations, selectedAnnotation, currentShapePreview, isDrawing, drawingPoints, zoom, editingTextId, activeConfig, pageWidth, pageHeight, rawWidth, rawHeight, pageRotation, display.width, display.height, pixelsPerCssPixel, searchMatches, activeMatchIndex, renderTrigger, shapeStart, isVisible, page.pageIndex]);
 
+  /**
+   * Map a pointer position into unrotated page space.
+   *
+   * The inverse of the overlay canvas transform, so a hit test lands on the same
+   * annotation the user can see regardless of how the page is turned.
+   */
   const getPdfCoords = (e: React.PointerEvent<HTMLCanvasElement>): Point => {
     const rect = overlayCanvasRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
-    return {
+    const inDisplay = {
       x: (e.clientX - rect.left) / zoom,
       y: (e.clientY - rect.top) / zoom,
     };
+    return displayToUnrotated(inDisplay, unrotatedSize, pageRotation);
   };
 
   const findHitAnnotation = (pt: Point) => {
@@ -1242,8 +1313,11 @@ const PageItemImpl: React.FC<PageItemProps> = ({
 
   // Direct Text Edit click handler
   const handleEditOriginalTextItem = (item: ExtractedPdfTextItem) => {
-    const colors = getPixelColorsAt(bgCanvasRef.current, item.x, item.y, pageWidth, pageHeight);
-    const newId = `edit-${item.id}`;
+    const colors = getPixelColorsAt(bgCanvasRef.current, item.x, item.y);
+    // Unique per edit. Deriving the id from the source run (`edit-` + item.id)
+    // gave two annotations the *same* id when a run was edited twice, so the
+    // second updated on delete but was never the one hit-tested.
+    const newId = nextAnnotationId('edit');
     const newTextAnn: TextAnnotation = {
       id: newId,
       pageIndex: page.pageIndex,
@@ -1255,6 +1329,10 @@ const PageItemImpl: React.FC<PageItemProps> = ({
       text: item.str,
       fontSize: item.fontSize,
       fontFamily: item.fontFamily || 'Inter, sans-serif',
+      // Carried across so an edited run keeps its weight and slant. Dropping
+      // them here flattened every bold-italic run to regular on export.
+      fontWeight: item.fontWeight === 'bold' ? 'bold' : 'normal',
+      fontStyle: item.fontStyle === 'italic' ? 'italic' : 'normal',
       color: colors.fg,
       backgroundColor: colors.bg,
     };
@@ -1265,8 +1343,8 @@ const PageItemImpl: React.FC<PageItemProps> = ({
   };
 
   const handleDeleteOriginalTextItem = (item: ExtractedPdfTextItem) => {
-    const colors = getPixelColorsAt(bgCanvasRef.current, item.x, item.y, pageWidth, pageHeight);
-    const newId = Math.random().toString(36).substring(2, 9);
+    const colors = getPixelColorsAt(bgCanvasRef.current, item.x, item.y);
+    const newId = nextAnnotationId('ann');
     const maskAnn: TextAnnotation = {
       id: newId,
       pageIndex: page.pageIndex,
@@ -1296,6 +1374,46 @@ const PageItemImpl: React.FC<PageItemProps> = ({
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    onSelectThisPage();
+
+    if (activeConfig.tool === 'pan' || activeConfig.tool === 'edit-text') return;
+
+    const pt = getPdfCoords(e);
+
+    // In select mode, a press that lands on no annotation means the user wants
+    // to select text. Capture is deliberately *not* taken and the canvas drops
+    // out of the hit path, so the browser's own drag-selection reaches the text
+    // layer underneath. Without this the canvas always won the click and the
+    // copy and translate controls could never be reached.
+    if (activeConfig.tool === 'select') {
+      // A corner of the current selection wins over everything else.
+      if (selectedAnnotation && isResizable(selectedAnnotation)) {
+        const corner = hitResizeCorner(selectedAnnotation, pt, RESIZE_HIT_SLOP_PX / zoom);
+        if (corner !== null) {
+          setResizeCorner(corner);
+          resizeOrigin.current = {
+            x: selectedAnnotation.x,
+            y: selectedAnnotation.y,
+            width: selectedAnnotation.width,
+            height: selectedAnnotation.height,
+          };
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // Best-effort; the window-level reset covers a failed capture.
+          }
+          setIsMouseDownOnOverlay(true);
+          return;
+        }
+      }
+
+      const hit = findHitAnnotation(pt);
+      if (!hit) {
+        setIsSelectingText(true);
+        return;
+      }
+    }
+
     // Capture the pointer so the rest of the gesture keeps arriving here even
     // when the cursor leaves the canvas — or the canvas is covered by an
     // element that mounts mid-gesture, such as the inline text editor.
@@ -1308,10 +1426,7 @@ const PageItemImpl: React.FC<PageItemProps> = ({
       // Capture is best-effort; the window-level safety net below covers the gap.
     }
 
-    onSelectThisPage();
     setIsMouseDownOnOverlay(true);
-    if (activeConfig.tool === 'pan' || activeConfig.tool === 'edit-text') return;
-    const pt = getPdfCoords(e);
 
     if (activeConfig.tool === 'eraser') {
       const hit = findHitAnnotation(pt);
@@ -1323,7 +1438,7 @@ const PageItemImpl: React.FC<PageItemProps> = ({
 
     if (pendingSignatureData) {
       onAddAnnotation({
-        id: Math.random().toString(36).substring(2, 9),
+        id: nextAnnotationId('ann'),
         pageIndex: page.pageIndex,
         type: 'signature',
         x: pt.x - 75,
@@ -1344,7 +1459,7 @@ const PageItemImpl: React.FC<PageItemProps> = ({
         const targetW = Math.min(220, Math.max(80, img.naturalWidth || 160));
         const targetH = targetW / aspect;
         const newImgAnn: ImageAnnotation = {
-          id: Math.random().toString(36).substring(2, 9),
+          id: nextAnnotationId('ann'),
           pageIndex: page.pageIndex,
           type: 'image',
           x: pt.x - targetW / 2,
@@ -1364,7 +1479,7 @@ const PageItemImpl: React.FC<PageItemProps> = ({
 
     if (pendingStampData) {
       onAddAnnotation({
-        id: Math.random().toString(36).substring(2, 9),
+        id: nextAnnotationId('ann'),
         pageIndex: page.pageIndex,
         type: 'stamp',
         x: pt.x - 85,
@@ -1380,7 +1495,7 @@ const PageItemImpl: React.FC<PageItemProps> = ({
 
     if (activeConfig.tool === 'checkbox') {
       onAddAnnotation({
-        id: Math.random().toString(36).substring(2, 9),
+        id: nextAnnotationId('ann'),
         pageIndex: page.pageIndex,
         type: 'checkbox',
         x: pt.x - 9,
@@ -1419,8 +1534,8 @@ const PageItemImpl: React.FC<PageItemProps> = ({
     }
 
     if (activeConfig.tool === 'text') {
-      const colors = getPixelColorsAt(bgCanvasRef.current, pt.x, pt.y, pageWidth, pageHeight);
-      const newId = Math.random().toString(36).substring(2, 9);
+      const colors = getPixelColorsAt(bgCanvasRef.current, pt.x, pt.y);
+      const newId = nextAnnotationId('ann');
       const newTextAnn: TextAnnotation = {
         id: newId,
         pageIndex: page.pageIndex,
@@ -1452,6 +1567,30 @@ const PageItemImpl: React.FC<PageItemProps> = ({
     // Ignore synthetic moves from a device that is not actually pressing.
     if (e.pointerType === 'mouse' && e.buttons === 0 && !isMouseDownOnOverlay) return;
     const pt = getPdfCoords(e);
+
+    // Resize takes precedence over every other gesture.
+    if (resizeCorner !== null && selectedAnnotation && resizeOrigin.current) {
+      const next = resizeBox(resizeOrigin.current, resizeCorner, pt);
+      onUpdateAnnotation({
+        ...selectedAnnotation,
+        x: next.x,
+        y: next.y,
+        width: next.width,
+        height: next.height,
+        // Straight lines and arrows are defined by their endpoints, so the box
+        // alone would scale nothing. The far end is stretched by the same
+        // factors the box changed by, which is what makes the line grow with
+        // the corner instead of only moving its bounding box.
+        ...(selectedAnnotation.type === 'line' || selectedAnnotation.type === 'arrow'
+          ? rescaleEndpoints(
+              selectedAnnotation,
+              resizeOrigin.current,
+              next,
+            )
+          : {}),
+      });
+      return;
+    }
 
     if (activeConfig.tool === 'eraser' && isMouseDownOnOverlay) {
       const hit = findHitAnnotation(pt);
@@ -1522,7 +1661,7 @@ const PageItemImpl: React.FC<PageItemProps> = ({
       }
 
       onAddAnnotation({
-        id: Math.random().toString(36).substring(2, 9),
+        id: nextAnnotationId('ann'),
         pageIndex: page.pageIndex,
         type: activeConfig.tool === 'highlighter' ? 'highlighter' : 'pen',
         x: minX,
@@ -1547,7 +1686,7 @@ const PageItemImpl: React.FC<PageItemProps> = ({
         const distCm = (distPt * 0.0352778).toFixed(2);
 
         onAddAnnotation({
-          id: Math.random().toString(36).substring(2, 9),
+          id: nextAnnotationId('ann'),
           pageIndex: page.pageIndex,
           type: 'measure',
           x: shapeStart.x,
@@ -1567,7 +1706,7 @@ const PageItemImpl: React.FC<PageItemProps> = ({
 
         if (activeConfig.tool === 'redact') {
           onAddAnnotation({
-            id: Math.random().toString(36).substring(2, 9),
+            id: nextAnnotationId('ann'),
             pageIndex: page.pageIndex,
             type: 'redact',
             x: currentShapePreview.x,
@@ -1578,7 +1717,7 @@ const PageItemImpl: React.FC<PageItemProps> = ({
           } as RedactionAnnotation);
         } else {
           onAddAnnotation({
-            id: Math.random().toString(36).substring(2, 9),
+            id: nextAnnotationId('ann'),
             pageIndex: page.pageIndex,
             type: activeConfig.tool as any,
             x: currentShapePreview.x,
@@ -1915,14 +2054,24 @@ const PageItemImpl: React.FC<PageItemProps> = ({
           left: 0,
           width: '100%',
           height: '100%',
-          cursor: activeConfig.tool === 'eraser' 
-            ? 'crosshair' 
-            : (activeConfig.tool === 'select' 
-                ? (isDraggingAnn ? 'grabbing' : 'default') 
+          cursor: activeConfig.tool === 'eraser'
+            ? 'crosshair'
+            : (activeConfig.tool === 'select'
+                ? (isDraggingAnn
+                    ? 'grabbing'
+                    : resizeCorner !== null
+                      ? 'nwse-resize'
+                      : 'default')
                 : 'crosshair'),
           display: 'block',
+          // Normally the top layer, so annotation hit-testing wins. While a text
+          // selection drag is in progress the canvas turns transparent to the
+          // pointer (see `isSelectingText`) and the browser selects the text
+          // layer beneath it — that is what makes copy and translate reachable
+          // on a page that also has annotations on it.
           zIndex: activeConfig.tool === 'edit-text' ? 10 : 25,
-          pointerEvents: activeConfig.tool === 'edit-text' ? 'none' : 'auto',
+          pointerEvents:
+            activeConfig.tool === 'edit-text' || isSelectingText ? 'none' : 'auto',
         }}
       />
 

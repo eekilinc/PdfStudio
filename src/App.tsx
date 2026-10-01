@@ -9,10 +9,12 @@ import type {
   SearchMatch,
   ReaderFilter
 } from './types/pdf';
-import { getSharedPdfDoc, clearPdfCache } from './utils/pdfInit';
+import { getSharedPdfDoc, releasePdfDoc } from './utils/pdfInit';
 import { createSamplePdf } from './utils/samplePdf';
 import { exportModifiedPdf, createBlankPdf } from './utils/pdfExport';
 import { hasRedactions, type RedactionQuality } from './utils/redaction';
+import { writeBinaryFile } from './utils/ipc';
+import { nextAnnotationId } from './utils/ids';
 import { usePdfHistory } from './hooks/usePdfHistory';
 import { useDocumentTabs } from './hooks/useDocumentTabs';
 import { DocumentTabs } from './components/DocumentTabs';
@@ -274,7 +276,10 @@ export function App() {
         return;
       }
 
-      clearPdfCache();
+      // Deliberately not clearing the cache here. The old single-slot cache had
+      // to be cleared before opening anything, which destroyed the document the
+      // current tab was still rendering. The cache is now per-buffer, so a second
+      // document simply gets its own entry.
       const pdf = await getSharedPdfDoc(arrayBuffer);
       if (!pdf) throw new Error('PDF yüklenemedi');
 
@@ -515,6 +520,11 @@ export function App() {
     const remainingTabs = tabs.filter((t) => t.id !== tabId);
     setTabs(remainingTabs);
 
+    // Release the PDF.js document behind the closed tab. Nothing else holds it
+    // once the tab is gone, and the worker keeps decoded pages and images for a
+    // document until it is explicitly destroyed.
+    void releasePdfDoc(tabToClose?.docState.data ?? null);
+
     if (activeTabId === tabId) {
       // Activate the neighbouring tab, falling back to the welcome screen.
       const nextTab = remainingTabs.at(-1);
@@ -544,6 +554,7 @@ export function App() {
   const handleOpenRecentFile = (path: string) => handleOpenFilePath(path);
 
   const handleCloseDocument = () => {
+    void releasePdfDoc(docState.data);
     initHistory(INITIAL_DOC_STATE);
     setCurrentFilePath(null);
     setSelectedAnnotation(null);
@@ -645,11 +656,7 @@ export function App() {
           onAnnotationFailure: warnOnDroppedAnnotations,
           redactionQuality,
         });
-        const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('write_pdf_file', {
-          path: currentFilePath,
-          contents: Array.from(exportedBytes),
-        });
+        await writeBinaryFile(currentFilePath, exportedBytes);
         markSaved();
         showToast(`✓ Kaydedildi: ${docState.filename}`, 'success');
         return;
@@ -691,10 +698,7 @@ export function App() {
         const { invoke } = await import('@tauri-apps/api/core');
         const chosenPath = await invoke<string | null>('pick_save_pdf_path', { defaultName });
         if (chosenPath) {
-          await invoke('write_pdf_file', {
-            path: chosenPath,
-            contents: Array.from(exportedBytes),
-          });
+          await writeBinaryFile(chosenPath, exportedBytes);
           const newFilename = chosenPath.split(/[\\/]/).pop() || defaultName;
           setCurrentFilePath(chosenPath);
           updateDocSilently((prev) => ({ ...prev, filename: newFilename }));
@@ -931,7 +935,7 @@ export function App() {
     const pageIndex = selectedAnnotation.pageIndex;
     const duplicated: Annotation = {
       ...selectedAnnotation,
-      id: Math.random().toString(36).substring(2, 9),
+      id: nextAnnotationId('dup'),
       x: selectedAnnotation.x + 20,
       y: selectedAnnotation.y + 20,
     };

@@ -17,6 +17,7 @@ import {
 import type { PDFDocumentState } from '../types/pdf';
 import { getSharedPdfDoc } from '../utils/pdfInit';
 import { redactedPageIndices } from '../utils/redaction';
+import { writeBinaryFile, writeTextFile } from '../utils/ipc';
 import {
   extractStructuredPage,
   generateDocx,
@@ -361,15 +362,9 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
 
           if (targetPath) {
             if (binaryData) {
-              await invoke('write_pdf_file', {
-                path: targetPath,
-                contents: Array.from(binaryData),
-              });
+              await writeBinaryFile(targetPath, binaryData);
             } else if (textData) {
-              await invoke('write_text_file', {
-                path: targetPath,
-                contents: textData,
-              });
+              await writeTextFile(targetPath, textData);
             }
             savedPath = targetPath;
           } else {
