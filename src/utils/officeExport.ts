@@ -17,6 +17,7 @@ import {
 } from 'docx';
 import writeXlsxFile from 'write-excel-file/browser';
 import JSZip from 'jszip';
+import { medianOf, groupIntoLines } from './textLayout';
 
 export interface ExcelCell {
   value: string | number | boolean | Date | null | undefined;
@@ -166,43 +167,31 @@ export async function extractStructuredPage(
     totalHeight += height;
   }
 
-  const medianHeight = rawItems.length > 0 ? totalHeight / rawItems.length : 12;
+  // A real median, not an average: one oversized heading or a large footer used
+  // to drag the baseline and with it every heading threshold on the page.
+  const medianHeight = rawItems.length > 0 ? medianOf(rawItems.map((item) => item.height)) : 12;
 
-  // 2. Group into lines/rows based on Y-coordinate (top to bottom)
-  // PDF Y=0 is bottom, so higher Y is higher on the page.
-  rawItems.sort((a, b) => {
-    const yDiff = b.y - a.y;
-    if (Math.abs(yDiff) > 4) return yDiff;
-    return a.x - b.x;
-  });
+  // 2. Group into lines by baseline, top to bottom.
+  //
+  // PDF Y grows upwards, so the largest baseline is the topmost line. Runs are
+  // ordered in two passes — by Y, then by X within each band — because the
+  // previous single comparator mixed the two (`if |dy| > 4 return dy; else
+  // a.x - b.x`) and was therefore not transitive: two runs could compare as both
+  // less than and greater than, leaving the output order to the sort engine.
+  const lineGroups = groupIntoLines(
+    rawItems.map((item) => ({
+      text: item.str,
+      x: item.x,
+      y: item.y,
+      height: item.height,
+      width: item.width,
+      isBold: item.isBold,
+    })),
+  ).map((line) => ({
+    y: line.y,
+    items: line.ordered.map((run) => ({ ...run, str: run.text })),
+  }));
 
-  interface LineGroup {
-    y: number;
-    items: RawTextItem[];
-  }
-
-  const lineGroups: LineGroup[] = [];
-  let currentLine: LineGroup | null = null;
-
-  for (const item of rawItems) {
-    if (!currentLine) {
-      currentLine = { y: item.y, items: [item] };
-    } else {
-      const diff = Math.abs(currentLine.y - item.y);
-      const tolerance = Math.max(4, Math.min(item.height * 0.45, 8));
-      if (diff <= tolerance) {
-        currentLine.items.push(item);
-      } else {
-        lineGroups.push(currentLine);
-        currentLine = { y: item.y, items: [item] };
-      }
-    }
-  }
-  if (currentLine) {
-    lineGroups.push(currentLine);
-  }
-
-  // 3. Process each line into column cells & plain text
   interface ProcessedLine {
     y: number;
     cells: string[];
