@@ -3,22 +3,12 @@ import { toWinAnsi, hexToRgb } from '../utils/pdfExport';
 
 describe('pdfExport utility functions', () => {
   describe('toWinAnsi', () => {
-    it('should correctly replace Turkish characters with ASCII equivalents', () => {
-      const input = 'Şemsi Paşa Pasajında Çarşıda Ağaç Öğretmen İlkokul ılık';
-      const output = toWinAnsi(input);
-      expect(output).toBe('Semsi Pasa Pasajinda Carsida Agac Ogretmen Ilkokul ilik');
-    });
-
+    // Turkish handling now lives in winAnsi.test.ts, which documents why the
+    // letters are preserved rather than folded to ASCII.
     it('should return empty string when input is empty or nullish', () => {
       expect(toWinAnsi('')).toBe('');
       // @ts-expect-error testing nullish handling
       expect(toWinAnsi(null)).toBe('');
-    });
-
-    it('should strip unsupported non-WinAnsi characters', () => {
-      const input = 'Hello 🚀 World ★';
-      const output = toWinAnsi(input);
-      expect(output).toBe('Hello  World ');
     });
   });
 

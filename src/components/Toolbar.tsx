@@ -291,7 +291,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={() => onSelectTool('redact')}
         className={`btn-icon ${activeConfig.tool === 'redact' ? 'active' : ''}`}
-        data-tooltip="Karart / Gizle (Hassas Veri Kapatma)"
+        data-tooltip="Kalıcı Karartma — kaydedince altındaki metin yok edilir (sayfa görüntüye dönüşür)"
         style={{ width: '30px', height: '30px' }}
       >
         <EyeOff size={15} color={activeConfig.tool === 'redact' ? '#ffffff' : '#f43f5e'} />

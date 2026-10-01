@@ -23,6 +23,14 @@ export interface AppSettings {
 
   // 4. OCR & Engine
   defaultOcrLanguage: 'tur' | 'eng' | 'deu' | 'fra';
+
+  // 5. Privacy
+  /**
+   * Whether the "send selected text to the translation service?" prompt may be
+   * skipped. The prompt exists because translation is the only feature that
+   * leaves the machine; a user who has read it can dismiss it for good.
+   */
+  confirmTextTranslation: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -44,6 +52,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showWelcomeScreenOnStartup: true,
 
   defaultOcrLanguage: 'tur',
+
+  // On by default: the prompt is the only thing standing between a document
+  // fragment and a third-party host.
+  confirmTextTranslation: true,
 };
 
 const SETTINGS_STORAGE_KEY = 'pdfstudio_user_settings';

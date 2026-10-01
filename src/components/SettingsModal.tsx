@@ -10,7 +10,8 @@ import {
   RotateCcw, 
   Check, 
   Trash2, 
-  Languages
+  Languages,
+  ShieldCheck
 } from 'lucide-react';
 import { DEFAULT_SETTINGS } from '../types/settings';
 import type { AppSettings } from '../types/settings';
@@ -258,7 +259,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }}
           >
             <Languages size={14} />
-            <span>OCR & Dil</span>
+            <span>OCR & Gizlilik</span>
           </button>
         </div>
 
@@ -696,6 +697,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <ShieldCheck size={16} color="var(--accent-primary)" />
+                  <span>Gizlilik: Metin Çevirisi Onayı</span>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  "Türkçe'ye Çevir" aracı, seçtiğiniz metni (en fazla 400 karakter) üçüncü
+                  taraf bir çeviri servisine gönderir. Uygulamanın geri kalanı hiçbir
+                  özellikte ağ bağlantısı kurmaz.
+                </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', color: 'var(--text-primary)' }}>
+                  <input
+                    type="checkbox"
+                    checked={current.confirmTextTranslation}
+                    onChange={(e) => handleChange('confirmTextTranslation', e.target.checked)}
+                  />
+                  <span>Her çeviriden önce onay iste</span>
+                </label>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Kapatırsanız onay penceresi hiç sorulmaz ve seçtiğiniz metin doğrudan
+                  gönderilir. Gizli belgelerle çalışıyorsanız açık bırakmanız önerilir.
                 </div>
               </div>
 

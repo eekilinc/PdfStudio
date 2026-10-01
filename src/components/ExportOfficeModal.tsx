@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import type { PDFDocumentState } from '../types/pdf';
 import { getSharedPdfDoc } from '../utils/pdfInit';
+import { redactedPageIndices } from '../utils/redaction';
 import {
   extractStructuredPage,
   generateDocx,
@@ -52,7 +53,7 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [progressPercent, setProgressPercent] = useState<number>(0);
   const [exportedSuccess, setExportedSuccess] = useState<string | null>(null);
-  const [pageRangeMode, setPageRangeMode] = useState<'all' | 'custom'>('all');
+  const [pageRangeMode, setPageRangeMode] = useState<'all' | 'custom' | 'unredacted'>('all');
   const [customPages, setCustomPages] = useState('1');
   const [saveLocationMode, setSaveLocationMode] = useState<SaveLocationMode>('ask');
 
@@ -171,6 +172,28 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
 
   const handleExport = async () => {
     if (!docState.data) return;
+
+    // Office formats read the source document, which still holds the redacted
+    // text. Exporting a redacted page would copy out verbatim the very thing the
+    // user blacked out, so those pages are dropped. Exporting the redacted PDF
+    // instead is not an option: those pages are rasterised and carry no text
+    // layer left to structure.
+    const redactedPages = redactedPageIndices(docState);
+    if (redactedPages.size > 0 && pageRangeMode !== 'unredacted') {
+      const redactedList = Array.from(redactedPages)
+        .map((p) => docState.pages.find((s) => s.pageIndex === p)?.displayPageNumber)
+        .filter((n): n is number => n !== undefined);
+
+      const proceed = window.confirm(
+        `Bu belgede ${redactedList.length} sayfada kalıcı karartma var ` +
+          `(sayfa ${redactedList.join(', ')}).\n\n` +
+          'Karartılmış sayfalar ofis formatlarına aktarılamaz — aksi halde gizlenen ' +
+          'metin olduğu gibi kopyalanır. Bu sayfalar dışarıda bırakılacak.\n\n' +
+          'Devam edilsin mi?',
+      );
+      if (!proceed) return;
+    }
+
     setIsExporting(true);
     setExportedSuccess(null);
     setStatusMessage('PDF belgesi yükleniyor...');
@@ -184,15 +207,33 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
       let targetPageIndices: number[] = [];
       const totalPages = pdf.numPages;
 
-      if (pageRangeMode === 'all') {
+      // Source page index -> 1-based position in the source document, so the
+      // filter below runs in the same space the user sees.
+      const redactedSourcePages = new Set<number>();
+      for (const p of redactedPages) {
+        const state = docState.pages.find((s) => s.pageIndex === p);
+        if (state) redactedSourcePages.add(state.originalPageNumber);
+      }
+
+      if (pageRangeMode === 'unredacted') {
+        targetPageIndices = Array.from({ length: totalPages }, (_, i) => i + 1).filter(
+          (n) => !redactedSourcePages.has(n),
+        );
+        if (targetPageIndices.length === 0) {
+          throw new Error('Karartma uygulanmamış sayfa kalmadı — dışa aktarılacak içerik yok.');
+        }
+      } else if (pageRangeMode === 'all') {
         targetPageIndices = Array.from({ length: totalPages }, (_, i) => i + 1);
       } else {
         const parts = customPages.split(',').map(s => s.trim());
         const set = new Set<number>();
         for (const p of parts) {
           if (p.includes('-')) {
-            const [start, end] = p.split('-').map(Number);
-            if (!isNaN(start) && !isNaN(end)) {
+            const [start = NaN, end = NaN] = p.split('-').map(Number);
+            // Guarded with Number.isFinite, not isNaN: a range like "1-a" parses
+            // to NaN, and isNaN(undefined) is false, so an unparsable bound
+            // would have slipped through into the page list.
+            if (Number.isFinite(start) && Number.isFinite(end)) {
               for (let k = Math.max(1, start); k <= Math.min(totalPages, end); k++) {
                 set.add(k);
               }
@@ -210,11 +251,29 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
         }
       }
 
+      // Applied last, so it also covers a custom range that happens to name a
+      // redacted page.
+      if (redactedSourcePages.size > 0) {
+        const before = targetPageIndices.length;
+        targetPageIndices = targetPageIndices.filter((n) => !redactedSourcePages.has(n));
+        if (targetPageIndices.length === 0) {
+          throw new Error('Seçilen sayfaların tümü karartma içeriyor — dışa aktarılacak içerik yok.');
+        }
+        if (targetPageIndices.length < before) {
+          notify(
+            `${before - targetPageIndices.length} karartılmış sayfa dışa aktarımdan çıkarıldı ` +
+              '(karartılmış metin ofis formatına kopyalanamaz).',
+            'info',
+          );
+        }
+      }
+
       // Extract structured page contents
       const structuredPages: StructuredPage[] = [];
 
       for (let i = 0; i < targetPageIndices.length; i++) {
         const pageNum = targetPageIndices[i];
+        if (pageNum === undefined) continue;
         setStatusMessage(`Sayfa ${pageNum} / ${totalPages} taranıyor ve yapı ayrıştırılıyor...`);
         const pct = Math.round(15 + ((i + 1) / targetPageIndices.length) * 55);
         setProgressPercent(pct);
@@ -641,6 +700,20 @@ export const ExportOfficeModal: React.FC<ExportOfficeModalProps> = ({
                   />
                   <span>Belirli Sayfalar</span>
                 </label>
+                {redactedPageIndices(docState).size > 0 && (
+                  <label
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: 'var(--text-primary)' }}
+                    title="Karartma uygulanmış sayfaları atlayarak yalnızca kalan içeriği aktarır"
+                  >
+                    <input
+                      type="radio"
+                      name="pageRange"
+                      checked={pageRangeMode === 'unredacted'}
+                      onChange={() => setPageRangeMode('unredacted')}
+                    />
+                    <span>Karartmasız Sayfalar</span>
+                  </label>
+                )}
               </div>
 
               {pageRangeMode === 'custom' && (

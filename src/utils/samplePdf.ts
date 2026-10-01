@@ -236,7 +236,7 @@ export async function createSamplePdf(): Promise<Uint8Array> {
     { m: 'Vektor Katmani', t: 'Custom Canvas Engine', f: 'Cizim, sekil ve metin duzenleme', s: 'Aktif' },
     { m: 'PDF Disa Aktarma', t: 'pdf-lib Engine', f: 'Katmanlari gomme & sayfa islemleri', s: 'Aktif' },
     { m: 'Masaustu Catisi', t: 'Tauri v2 + Rust', f: 'Ultra hafif bellek & yerel dosya hizi', s: 'Aktif' },
-    { m: 'Guvenlik & Karartma', t: 'Redaction Engine', f: 'Hassas verileri kalici olarak yok etme', s: 'Aktif' },
+    { m: 'Guvenlik & Karartma', t: 'Redaction Engine', f: 'Hassas veriyi sayfayi gorsellestirerek yok eder', s: 'Aktif' },
   ];
 
   tableRows.forEach((row, i) => {

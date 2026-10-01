@@ -18,6 +18,8 @@
 <br/>
 
 > **PDF Studio Pro**, tarayıcı sınırlarını aşan yerel masaüstü performansı, gelişmiş çift katmanlı tuval mimarisi (Dual-Canvas), optik karakter tanıma (OCR), doğrudan PDF metin değiştirme ve gerçek **AES-256** şifreleme desteği sunan yeni nesil bir PDF düzenleyicisidir. Hiçbir veriniz internete gönderilmez; her işlem tamamen bilgisayarınızda gerçekleşir.
+>
+> **Gizlilik notu:** Metin seçtikten sonra "Türkçe'ye Çevir" aracını kullandığınızda, seçtiğiniz metin (en fazla 400 karakter) çeviri için üçüncü taraf bir servise gönderilir. Bu, optik çeviri dışında hiçbir özellik ağ bağlantısı kurmaz. Göndermeden önce onay penceresi çıkar ve bir kez onayladıktan sonra o oturum boyunca tekrar sorulmaz; onayı **Ayarlar → OCR & Gizlilik** bölümünden tamamen kapatabilirsiniz.
 
 <br/>
 
@@ -105,7 +107,11 @@
 
 ### 8. Boyut Küçültme (Compress) & Hassas Veri Karartma (Redact)
 - **PDF Sıkıştırma:** Düşük, Orta ve Yüksek sıkıştırma profilleriyle dosya boyutunu %80'e varan oranlarda küçültün.
-- **Kalıcı Karartma (Redaction):** TC Kimlik, IBAN, telefon gibi hassas kişisel verileri kalıcı siyah/beyaz bloklarla maskeleyip dışa aktarın.
+- **Kalıcı Karartma (Redaction):** TC Kimlik, IBAN, telefon gibi hassas verileri seçip karartın. Karartma, üzerine siyah kutu çizerek değil, **sayfayı yüksek çözünürlükte yeniden görüntüleyip kutuları piksele gömererek** yapılır: sayfanın metin akışı ve font kaynakları atılır, dolayısıyla kapatılan metin seçilemez, kopyalanamaz, aranamaz ve hiçbir PDF aracıyla geri çıkarılamaz.
+
+  > **Bilmeniz gereken tek bir bedel:** Metni gerçekten yok edebilmek için karartılmış sayfa bir görüntüye dönüştürülür. Bu sayfalar kaydedildikten sonra metin katmanı taşımaz, yani o sayfalarda metin seçme ve arama çalışmaz. Karartma uygulanmayan sayfalar vektör olarak kalır, metinleri bozulmaz.
+  >
+  > Kaydetme sırasında uygulama çözünürlük seçmenizi ister: **180 DPI** (ekran ve günlük kullanım, küçük dosya) veya **300 DPI** (baskı ve arşiv kalitesi, büyük dosya). Karartma uygulanmış bir belgeyi Word/Excel/CSV gibi ofis formatlarına aktarmak istediğinizde, gizlenen metni kopyalamamak için karartılmış sayfalar dışa aktarımdan çıkarılır — modalda **"Karartmasız Sayfalar"** seçeneğiyle bunu doğrudan yapabilirsiniz.
 
 ### 9. Komut Paleti, Belge Özellikleri, Durum Çubuğu & Sunum Modu
 - **Raycast / Spotlight Hızlı Komut Paleti (`Ctrl+K`):** Menüler arasında kaybolmadan klavyeden arama yapın; tüm araçlar, dışa aktarım seçenekleri ve görünüm filtrelerine anında erişin.

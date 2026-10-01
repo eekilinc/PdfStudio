@@ -110,7 +110,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       case 'arrow': return { label: 'Geometrik Şekil', icon: <Square size={11} /> };
       case 'signature': return { label: 'Dijital İmza', icon: <PenSquare size={11} color="var(--accent-primary)" /> };
       case 'stamp': return { label: 'Damga & Kaşe', icon: <Stamp size={11} color="#e11d48" /> };
-      case 'redact': return { label: 'Karartma / Gizleme', icon: <EyeOff size={11} color="#f43f5e" /> };
+      case 'redact': return { label: 'Kalıcı Karartma', icon: <EyeOff size={11} color="#f43f5e" /> };
       case 'eraser': return { label: 'Silgi', icon: <Eraser size={11} /> };
       case 'measure': return { label: 'Mesafe Cetveli', icon: <Ruler size={11} color="#f59e0b" /> };
       case 'checkbox': return { label: 'Onay Kutusu', icon: <CheckSquare size={11} /> };

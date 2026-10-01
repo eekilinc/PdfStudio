@@ -1,17 +1,95 @@
 import { PDFDocument, rgb, degrees, StandardFonts, PDFPage, LineCapStyle } from 'pdf-lib';
-import type { Annotation, PDFDocumentState, TextAnnotation, DrawingAnnotation, ShapeAnnotation, SignatureAnnotation, StampAnnotation, RedactionAnnotation } from '../types/pdf';
+import type { PDFFont } from 'pdf-lib';
+import { applyRedactions, collectRedactions, type RedactionQuality } from './redaction';
+import type { Annotation, PDFDocumentState, TextAnnotation, DrawingAnnotation, ShapeAnnotation, SignatureAnnotation, StampAnnotation } from '../types/pdf';
 
-// Sanitize characters for standard PDF 14 WinAnsi fonts
+/**
+ * Fold a string to the WinAnsi range used by the PDF standard-14 fonts.
+ *
+ * WinAnsiEncoding is CP1252-shaped: slots 0xA0-0xFF follow Latin-1, so the
+ * Turkish letters that Latin-1 contains — ç Ç ö Ö ü Ü — are already encodable
+ * and are left alone. Folding them to ASCII, as this function used to, needlessly
+ * corrupted Turkish words in the exported document's own text layer.
+ *
+ * The remaining Turkish letters have no WinAnsi slot at all: ğ Ğ ş Ş ı İ live
+ * above U+00FF and cannot be represented, so they are transliterated to their
+ * nearest ASCII rather than dropped, which would leave holes mid-word.
+ */
 export function toWinAnsi(str: string): string {
   if (!str) return '';
-  return str
-    .replace(/ğ/g, 'g').replace(/Ğ/g, 'G')
-    .replace(/ü/g, 'u').replace(/Ü/g, 'U')
-    .replace(/ş/g, 's').replace(/Ş/g, 'S')
-    .replace(/ı/g, 'i').replace(/İ/g, 'I')
-    .replace(/ö/g, 'o').replace(/Ö/g, 'O')
-    .replace(/ç/g, 'c').replace(/Ç/g, 'C')
-    .replace(/[^\x20-\x7E\xA0-\xFF]/g, '');
+  return (
+    str
+      // Typographic punctuation with a direct WinAnsi equivalent. These are
+      // ASCII stand-ins because pdf-lib's WinAnsi encoder has no glyph slot for
+      // the curly variants; dropping them would run words together.
+      .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+      .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+      .replace(/[\u2013\u2014\u2212]/g, '-')
+      .replace(/\u2026/g, '...')
+      .replace(/\u00A0/g, ' ')
+      .replace(/\u0192/g, 'f')
+      .replace(/[\u2039\u203A]/g, ' ')
+      .replace(/\u2030/g, '%')
+      .replace(/[\u02C6\u02DC]/g, '~')
+      .replace(/[\u02DD\u02DB]/g, '"')
+      .replace(/\u02DA/g, 'o')
+      .replace(/[\u2020\u2021]/g, '+')
+      .replace(/\u0152/g, 'OE')
+      .replace(/\u0153/g, 'oe')
+      .replace(/\u0160/g, 'S')
+      .replace(/\u017D/g, 'Z')
+      .replace(/\u017E/g, 'z')
+      .replace(/\u0178/g, 'Y')
+      // Turkish letters with no WinAnsi slot. Latin-1 covers ç Ç ö Ö ü Ü, which
+      // are left alone above; these four pairs sit above U+00FF and simply are
+      // not representable in the standard-14 fonts. Each pattern is
+      // case-preserving so the leading capital of a word survives.
+      .replace(/ş/g, 's')
+      .replace(/Ş/g, 'S')
+      .replace(/ğ/g, 'g')
+      .replace(/Ğ/g, 'G')
+      .replace(/ı/g, 'i')
+      .replace(/İ/g, 'I')
+      // Anything still outside the encodable set is removed rather than
+      // substituted, since a wrong glyph would misrepresent the text.
+      .replace(/[^\x20-\x7E\xA0-\xFF]/g, '')
+  );
+}
+
+/**
+ * Resolve a family + weight pair to one of the four embedded standard fonts.
+ *
+ * The weight has to be decided *inside* the family branches. Checking weight
+ * first and family second let the family test overwrite it, so a bold
+ * "Times New Roman" annotation exported as regular Times.
+ */
+/** The six standard-14 faces the exporter embeds. */
+interface ExportFonts {
+  Helvetica: PDFFont;
+  HelveticaBold: PDFFont;
+  Times: PDFFont;
+  TimesBold: PDFFont;
+  Courier: PDFFont;
+  CourierBold: PDFFont;
+}
+
+function pickFont(
+  fontFamily: string | undefined,
+  fontWeight: string | undefined,
+  fonts: ExportFonts,
+): PDFFont {
+  const isBold = fontWeight === 'bold';
+  const family = (fontFamily ?? '').toLowerCase();
+
+  if (family.includes('times') || family.includes('serif') || family.includes('georgia') || family.includes('garamond')) {
+    return isBold ? fonts.TimesBold : fonts.Times;
+  }
+  if (family.includes('courier') || family.includes('mono') || family.includes('consolas')) {
+    return isBold ? fonts.CourierBold : fonts.Courier;
+  }
+  // Helvetica is the fallback: only the standard-14 faces are embedded, so an
+  // arbitrary family name cannot be honoured and must not crash the export.
+  return isBold ? fonts.HelveticaBold : fonts.Helvetica;
 }
 
 // Parse hex color string '#RRGGBB' to pdf-lib rgb(r, g, b)
@@ -29,7 +107,26 @@ export function hexToRgb(hex: string) {
   return rgb(r, g, b);
 }
 
-export async function exportModifiedPdf(docState: PDFDocumentState): Promise<Uint8Array> {
+/**
+ * Serialise the document to PDF bytes, annotations included.
+ *
+ * @param onRedactionProgress Progress callback for the rasterisation step that
+ *   permanently destroys redacted pages. See `utils/redaction.ts`.
+ */
+export async function exportModifiedPdf(
+  docState: PDFDocumentState,
+  options: {
+    /** Progress of the permanent-redaction rasterisation step, 0-100. */
+    onRedactionProgress?: (percent: number) => void;
+    /**
+     * Called with the types of annotations that could not be written. The save
+     * still succeeds, so the caller is expected to warn the user.
+     */
+    onAnnotationFailure?: (types: string[]) => void;
+    /** Raster resolution for redacted pages. Ignored if there are none. */
+    redactionQuality?: RedactionQuality;
+  } = {},
+): Promise<Uint8Array> {
   if (!docState.data) {
     throw new Error('No PDF document loaded.');
   }
@@ -38,11 +135,15 @@ export async function exportModifiedPdf(docState: PDFDocumentState): Promise<Uin
   const srcDoc = await PDFDocument.load(docState.data);
   const outDoc = await PDFDocument.create();
 
-  // Pre-embed standard fonts
+  // Pre-embed standard fonts. The bold faces of Times and Courier are embedded
+  // too, so a bold serif or monospace annotation exports bold instead of
+  // silently losing its weight.
   const fontHelvetica = await outDoc.embedFont(StandardFonts.Helvetica);
   const fontHelveticaBold = await outDoc.embedFont(StandardFonts.HelveticaBold);
   const fontTimes = await outDoc.embedFont(StandardFonts.TimesRoman);
+  const fontTimesBold = await outDoc.embedFont(StandardFonts.TimesRomanBold);
   const fontCourier = await outDoc.embedFont(StandardFonts.Courier);
+  const fontCourierBold = await outDoc.embedFont(StandardFonts.CourierBold);
 
   // Copy pages in the desired order (filtering out deleted ones)
   const validPageIndices = docState.pageOrder.filter(idx => {
@@ -56,6 +157,7 @@ export async function exportModifiedPdf(docState: PDFDocumentState): Promise<Uin
 
   for (let i = 0; i < validPageIndices.length; i++) {
     const pageIndex = validPageIndices[i];
+    if (pageIndex === undefined) continue;
     const pageState = docState.pages.find(p => p.pageIndex === pageIndex);
     if (!pageState) continue;
 
@@ -81,6 +183,7 @@ export async function exportModifiedPdf(docState: PDFDocumentState): Promise<Uin
 
     // Render annotations for this page
     const pageAnnotations = docState.annotations[pageIndex] || [];
+    const failed: Annotation[] = [];
 
     for (const ann of pageAnnotations) {
       try {
@@ -88,15 +191,32 @@ export async function exportModifiedPdf(docState: PDFDocumentState): Promise<Uin
           Helvetica: fontHelvetica,
           HelveticaBold: fontHelveticaBold,
           Times: fontTimes,
+          TimesBold: fontTimesBold,
           Courier: fontCourier,
+          CourierBold: fontCourierBold,
         });
       } catch (err) {
+        // Collected rather than merely logged: a silently dropped signature or
+        // stamp is worse than a visible warning, because the user is told the
+        // save succeeded.
         console.error('Annotation render error for', ann.id, err);
+        failed.push(ann);
       }
     }
+
+    if (failed.length > 0) options.onAnnotationFailure?.(failed.map((a) => a.type));
   }
 
-  return await outDoc.save();
+  const bytes = await outDoc.save();
+
+  // Destroy redacted pages, if any. Runs after the vector pass so the
+  // re-render also captures the other annotations flattened into the page.
+  return await applyRedactions(
+    bytes,
+    collectRedactions(docState),
+    options.onRedactionProgress,
+    options.redactionQuality,
+  );
 }
 
 async function renderAnnotationToPdfPage(
@@ -104,7 +224,7 @@ async function renderAnnotationToPdfPage(
   page: PDFPage,
   doc: PDFDocument,
   pHeight: number,
-  fonts: Record<string, any>
+  fonts: ExportFonts
 ) {
   // Convert standard coordinate system (Origin at top-left in web canvas vs bottom-left in PDF)
   // ann.y in canvas is from top, so pdfY = pHeight - ann.y - ann.height (or specific point)
@@ -113,20 +233,10 @@ async function renderAnnotationToPdfPage(
   const opacity = ann.opacity !== undefined ? ann.opacity : 1.0;
 
   switch (ann.type) {
-    case 'redact': {
-      const redactAnn = ann as RedactionAnnotation;
-      const pdfY = pHeight - redactAnn.y - redactAnn.height;
-      const fillRgb = hexToRgb(redactAnn.color || '#000000') || rgb(0, 0, 0);
-      page.drawRectangle({
-        x: redactAnn.x,
-        y: pdfY,
-        width: redactAnn.width,
-        height: redactAnn.height,
-        color: fillRgb,
-        opacity: 1.0,
-      });
-      break;
-    }
+    // Redaction is deliberately not drawn here. Painting a rectangle leaves the
+    // text underneath intact in the content stream, which is exactly the
+    // failure mode permanent redaction exists to prevent. The boxes are instead
+    // collected and destroyed by `applyRedactions`, which rasterises the page.
 
     case 'rect': {
       const shape = ann as ShapeAnnotation;
@@ -240,6 +350,7 @@ async function renderAnnotationToPdfPage(
       for (let i = 0; i < drawAnn.points.length - 1; i++) {
         const p1 = drawAnn.points[i];
         const p2 = drawAnn.points[i + 1];
+        if (!p1 || !p2) continue;
 
         page.drawLine({
           start: { x: p1.x, y: pHeight - p1.y },
@@ -255,18 +366,13 @@ async function renderAnnotationToPdfPage(
 
     case 'text': {
       const textAnn = ann as TextAnnotation;
-      let font = fonts.Helvetica;
-      if (textAnn.fontWeight === 'bold') {
-        font = fonts.HelveticaBold;
-      }
-      if (textAnn.fontFamily === 'Times New Roman' || textAnn.fontFamily === 'serif') {
-        font = fonts.Times;
-      } else if (textAnn.fontFamily === 'Courier' || textAnn.fontFamily === 'monospace') {
-        font = fonts.Courier;
-      }
+      const font = pickFont(textAnn.fontFamily, textAnn.fontWeight, fonts);
 
       const fontSize = textAnn.fontSize || 14;
-      const pdfY = pHeight - textAnn.y - fontSize;
+      // Text is drawn on its baseline, which sits a descender below the box the
+      // viewer lays out. Centring the baseline in that box keeps the exported
+      // text where the preview showed it.
+      const pdfY = pHeight - textAnn.y - fontSize * 0.8;
 
       // Draw background if present
       if (textAnn.backgroundColor && textAnn.backgroundColor !== 'transparent') {
@@ -289,14 +395,42 @@ async function renderAnnotationToPdfPage(
 
       lines.forEach((line, lineIndex) => {
         if (!line.trim() && lines.length === 1) return;
-        page.drawText(toWinAnsi(line), {
-          x: textAnn.x,
+        const safeLine = toWinAnsi(line);
+        if (!safeLine) return;
+
+        // Honour the alignment the toolbar offers. Previously `textAlign` was
+        // ignored and every line was left-aligned, so a centred watermark
+        // exported flush left.
+        const lineWidth = font.widthOfTextAtSize(safeLine, fontSize);
+        const boxWidth = textAnn.width || lineWidth;
+        const drawX =
+          textAnn.textAlign === 'center'
+            ? textAnn.x + (boxWidth - lineWidth) / 2
+            : textAnn.textAlign === 'right'
+              ? textAnn.x + boxWidth - lineWidth
+              : textAnn.x;
+
+        const drawOptions = {
+          x: drawX,
           y: pdfY - lineIndex * lineHeight,
           size: fontSize,
-          font: font,
+          font,
           color: strokeColor,
-          opacity: opacity,
-        });
+          opacity,
+          // Without this a rotated annotation exported upright.
+          ...(textAnn.rotation ? { rotate: degrees(textAnn.rotation) } : {}),
+        };
+
+        if (textAnn.rotation) {
+          // pdf-lib rotates about (x, y), so the origin has to move to the box
+          // centre for the text to pivot where the viewer showed it.
+          const cx = textAnn.x + (textAnn.width || lineWidth) / 2;
+          const cy = pHeight - textAnn.y - (textAnn.height || fontSize);
+          drawOptions.x = cx;
+          drawOptions.y = cy;
+        }
+
+        page.drawText(safeLine, drawOptions);
       });
       break;
     }

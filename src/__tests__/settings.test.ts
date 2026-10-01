@@ -53,4 +53,29 @@ describe('settings management', () => {
     const loaded = loadSettings();
     expect(loaded).toEqual(DEFAULT_SETTINGS);
   });
+
+  it('asks before translating by default', () => {
+    // The prompt is the only thing standing between a document fragment and a
+    // third-party host, so it must not default to off.
+    expect(DEFAULT_SETTINGS.confirmTextTranslation).toBe(true);
+    expect(loadSettings().confirmTextTranslation).toBe(true);
+  });
+
+  it('persists a disabled translation prompt', () => {
+    saveSettings({ ...DEFAULT_SETTINGS, confirmTextTranslation: false });
+    expect(loadSettings().confirmTextTranslation).toBe(false);
+  });
+
+  it('backfills the translation prompt for settings saved before it existed', () => {
+    // A stored blob predating this key must not leave it undefined, which would
+    // read as falsy and silently skip the consent prompt.
+    localStorage.setItem(
+      'pdfstudio_user_settings',
+      JSON.stringify({ theme: 'light', defaultZoom: 2 }),
+    );
+    const loaded = loadSettings();
+    expect(loaded.theme).toBe('light');
+    expect(loaded.defaultZoom).toBe(2);
+    expect(loaded.confirmTextTranslation).toBe(true);
+  });
 });
