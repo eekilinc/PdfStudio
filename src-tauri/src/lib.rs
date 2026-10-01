@@ -20,6 +20,15 @@ fn read_pdf_file(path: String) -> Result<Vec<u8>, String> {
     fs::read(&path).map_err(|e| format!("Dosya okunamadı: {}", e))
 }
 
+/// Write a file from the document bytes.
+///
+/// The bytes arrive as a JSON array of numbers, because that is what the
+/// JavaScript side can produce: a typed array is not accepted for a `Vec<u8>`
+/// parameter, so the caller has to expand it. That is the one remaining cost in
+/// this path — a 20 MB document becomes roughly 160 MB of numbers plus a large
+/// JSON string in transit. Moving to a raw IPC body would remove it, but
+/// `tauri::ipc::Request` only exposes an `InvokeBody` and `invoke` has no raw
+/// mode, so there is no way to do it from this API surface today.
 #[tauri::command]
 fn write_pdf_file(path: String, contents: Vec<u8>) -> Result<(), String> {
     fs::write(&path, contents).map_err(|e| format!("Dosya kaydedilemedi: {}", e))
@@ -157,15 +166,36 @@ fn write_text_file(path: String, contents: String) -> Result<(), String> {
     fs::write(&path, contents).map_err(|e| format!("Dosya kaydedilemedi: {}", e))
 }
 
+/// Open a URL in the user's browser.
+///
+/// The URL is restricted to `https`/`http` and rejected if it contains a shell
+/// metacharacter. `cmd /C start` hands its argument to the Windows shell, where
+/// `&`, `|` and `>` are command separators, so an unvalidated URL reaching this
+/// command from the webview would be a command injection. Rejecting the
+/// metacharacters as well as the scheme means a bad URL fails loudly instead of
+/// silently launching something unexpected.
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
+    let trimmed = url.trim();
+
+    if !(trimmed.starts_with("https://") || trimmed.starts_with("http://")) {
+        return Err("Yalnızca http ve https adresleri açılabilir.".to_string());
+    }
+
+    if trimmed
+        .chars()
+        .any(|c| matches!(c, '&' | '|' | '<' | '>' | '^' | '"' | '`' | '\r' | '\n' | '\0'))
+    {
+        return Err("Adres güvenli olmayan karakterler içeriyor.".to_string());
+    }
+
     #[cfg(target_os = "windows")]
     {
-        use std::process::Command;
         use std::os::windows::process::CommandExt;
+        use std::process::Command;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         Command::new("cmd")
-            .args(["/C", "start", "", &url])
+            .args(["/C", "start", "", trimmed])
             .creation_flags(CREATE_NO_WINDOW)
             .spawn()
             .map_err(|e| e.to_string())?;
@@ -173,7 +203,7 @@ fn open_url(url: String) -> Result<(), String> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = url;
+        let _ = trimmed;
         Ok(())
     }
 }
@@ -192,8 +222,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_startup_file, 
-            read_pdf_file, 
+            get_startup_file,
+            read_pdf_file,
             write_pdf_file,
             write_text_file,
             open_pdf_dialog,
