@@ -41,18 +41,6 @@ export function useDocumentTabs() {
     );
   }, [activeTabId]);
 
-  const removeTab = useCallback((tabId: string): DocumentTabItem | null => {
-    let nextTab: DocumentTabItem | null = null;
-    setTabs((prev) => {
-      const remaining = prev.filter((t) => t.id !== tabId);
-      if (activeTabId === tabId && remaining.length > 0) {
-        nextTab = remaining[remaining.length - 1];
-      }
-      return remaining;
-    });
-    return nextTab;
-  }, [activeTabId]);
-
   const clearAllTabs = useCallback(() => {
     setTabs([]);
     setActiveTabId('');
@@ -65,7 +53,6 @@ export function useDocumentTabs() {
     setActiveTabId,
     addTab,
     updateActiveTabDoc,
-    removeTab,
     clearAllTabs,
   };
 }

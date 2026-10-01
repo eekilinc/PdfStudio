@@ -12,6 +12,7 @@ import type {
 import { getSharedPdfDoc, clearPdfCache } from './utils/pdfInit';
 import { createSamplePdf } from './utils/samplePdf';
 import { exportModifiedPdf, createBlankPdf } from './utils/pdfExport';
+import { hasRedactions, type RedactionQuality } from './utils/redaction';
 import { usePdfHistory } from './hooks/usePdfHistory';
 import { useDocumentTabs } from './hooks/useDocumentTabs';
 import { DocumentTabs } from './components/DocumentTabs';
@@ -86,14 +87,17 @@ export function App() {
 
   const {
     docState,
-    setDocState,
+    isDirty,
     initHistory,
     updateDocWithHistory,
+    updateDocInPlace,
+    updateDocSilently,
+    markSaved,
+    markDirty,
     canUndo,
     canRedo,
     undo,
     redo,
-    resetHistory,
   } = usePdfHistory(INITIAL_DOC_STATE);
 
   // Multi-Document Tabs Management
@@ -146,9 +150,24 @@ export function App() {
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [toast, setToast] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
 
+  // Keep the dismissal timer in a ref so a burst of toasts restarts one timer
+  // instead of stacking several, and so a rapid sequence cannot leave the
+  // earliest timer firing while a newer toast is still meant to be visible.
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    },
+    [],
+  );
+
   const showToast = (text: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToast({ text, type });
-    setTimeout(() => setToast(null), 3200);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => {
+      toastTimerRef.current = null;
+      setToast(null);
+    }, 3200);
   };
 
   const [isOrganizeModalOpen, setIsOrganizeModalOpen] = useState(false);
@@ -167,7 +186,6 @@ export function App() {
   const [isDocPropertiesOpen, setIsDocPropertiesOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isDirty, setIsDirty] = useState(false);
 
   const handleFitPage = () => setZoom(0.85);
   const handleFitWidth = () => setZoom(1.25);
@@ -207,6 +225,25 @@ export function App() {
     } catch {
       // Ignore storage errors
     }
+  };
+
+  // Switch to another open tab.
+  //
+  // Declared before `parseAndSetPdf` because that function needs to jump to an
+  // already-open tab when a file is opened twice, and a `const` arrow read from
+  // above its own declaration would sit in the temporal dead zone.
+  const handleSelectTab = (tabId: string) => {
+    if (tabId === activeTabId) return;
+    const targetTab = tabs.find((t) => t.id === tabId);
+    if (!targetTab) return;
+
+    setActiveTabId(tabId);
+    setCurrentPageIndex(targetTab.currentPageIndex);
+    setCurrentFilePath(targetTab.filePath);
+    initHistory(targetTab.docState);
+    setSelectedAnnotation(null);
+    setSearchMatches([]);
+    setActiveMatchIndex(-1);
   };
 
   // Helper to parse PDF ArrayBuffer and build page states instantaneously
@@ -273,13 +310,11 @@ export function App() {
         annotations: {},
       };
 
-      setDocState(initialDoc);
       initHistory(initialDoc);
       setCurrentPageIndex(0);
       setSelectedAnnotation(null);
       setSearchMatches([]);
       setActiveMatchIndex(-1);
-      setIsDirty(false);
       setCurrentFilePath(resolvedFilePath);
       addTab(filename, resolvedFilePath, initialDoc);
     } catch (err) {
@@ -354,10 +389,25 @@ export function App() {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
+  // Everything the long-lived window listeners need to reach.
+  //
+  // These effects deliberately mount once and would otherwise re-subscribe on
+  // every keystroke, since the handlers close over document state that changes
+  // constantly. A ref keeps the latest values reachable without that cost —
+  // the same approach already used for the keyboard actions below.
+  const handlersRef = useRef({
+    loadStartupFileOrSample,
+    handleOpenPdfFile,
+    handleOpenFilePath,
+  });
+  useEffect(() => {
+    handlersRef.current = { loadStartupFileOrSample, handleOpenPdfFile, handleOpenFilePath };
+  });
+
   // Load startup file passed via CLI / "Open With" or fallback to sample PDF
   useEffect(() => {
     const timer = setTimeout(() => {
-      void loadStartupFileOrSample();
+      void handlersRef.current.loadStartupFileOrSample();
     }, 0);
     return () => clearTimeout(timer);
   }, []);
@@ -388,7 +438,7 @@ export function App() {
                   return;
                 }
                 for (const pdfPath of pdfPaths) {
-                  await handleOpenFilePath(pdfPath);
+                  await handlersRef.current.handleOpenFilePath(pdfPath);
                 }
               }
             }
@@ -428,7 +478,7 @@ export function App() {
         }
 
         for (const file of pdfFiles) {
-          await handleOpenPdfFile(file);
+          await handlersRef.current.handleOpenPdfFile(file);
         }
       }
     };
@@ -453,22 +503,6 @@ export function App() {
     }
   }, [docState, isDirty, currentPageIndex, activeTabId, updateActiveTabDoc]);
 
-  // Tab Selection Handler
-  const handleSelectTab = (tabId: string) => {
-    if (tabId === activeTabId) return;
-    const targetTab = tabs.find((t) => t.id === tabId);
-    if (!targetTab) return;
-
-    setActiveTabId(tabId);
-    setDocState(targetTab.docState);
-    setCurrentPageIndex(targetTab.currentPageIndex);
-    setCurrentFilePath(targetTab.filePath);
-    initHistory(targetTab.docState);
-    setSelectedAnnotation(null);
-    setSearchMatches([]);
-    setActiveMatchIndex(-1);
-  };
-
   // Tab Close Handler
   const handleCloseTab = (tabId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -482,10 +516,10 @@ export function App() {
     setTabs(remainingTabs);
 
     if (activeTabId === tabId) {
-      if (remainingTabs.length > 0) {
-        const nextTab = remainingTabs[remainingTabs.length - 1];
+      // Activate the neighbouring tab, falling back to the welcome screen.
+      const nextTab = remainingTabs.at(-1);
+      if (nextTab) {
         setActiveTabId(nextTab.id);
-        setDocState(nextTab.docState);
         setCurrentPageIndex(nextTab.currentPageIndex);
         setCurrentFilePath(nextTab.filePath);
         initHistory(nextTab.docState);
@@ -510,10 +544,9 @@ export function App() {
   const handleOpenRecentFile = (path: string) => handleOpenFilePath(path);
 
   const handleCloseDocument = () => {
-    setDocState(INITIAL_DOC_STATE);
+    initHistory(INITIAL_DOC_STATE);
     setCurrentFilePath(null);
     setSelectedAnnotation(null);
-    resetHistory();
     clearAllTabs();
     setSearchMatches([]);
     setActiveMatchIndex(-1);
@@ -555,19 +588,69 @@ export function App() {
     redo(() => setSelectedAnnotation(null));
   };
 
+  /**
+   * Ask once, before any export, whether a document with redaction boxes may be
+   * written out.
+   *
+   * Redacted pages are rasterised to destroy the text underneath, so they leave
+   * this app without a selectable text layer. That is the price of real
+   * redaction and the user has to hear it before saving, not discover it later.
+   *
+   * The resolution is offered here rather than buried in Settings, because it
+   * decides the print quality of the very pages holding the hidden data.
+   */
+  const confirmRedactionRasterisation = (): RedactionQuality | null => {
+    if (!hasRedactions(docState)) return 'standard';
+
+    const choice = window.prompt(
+      'Bu belgede kalıcı karartma (redaction) uygulanmış.\n\n' +
+        'Karartılmış sayfalar, altlarındaki metin kalıcı olarak yok edileceği için ' +
+        'görüntü olarak yeniden oluşturulur. Bu sayfalar kaydedildikten sonra ' +
+        'metin seçilebilir ve aranabilir olmaz.\n\n' +
+        'Karartma çözünürlüğü:\n' +
+        '  1 — 180 DPI (ekran ve günlük kullanım, küçük dosya)\n' +
+        '  2 — 300 DPI (baskı ve arşiv kalitesi, büyük dosya)\n\n' +
+        'Numarayı girin. Vazgeçmek için iptal edin.',
+      '1',
+    );
+
+    if (choice === null) return null;
+    return choice.trim() === '2' ? 'print' : 'standard';
+  };
+
+  /**
+   * Tell the user when some annotations could not be written.
+   *
+   * The save itself succeeds, so without this the file would look correct on
+   * screen and quietly be missing a signature or a stamp.
+   */
+  const warnOnDroppedAnnotations = (types: string[]) => {
+    const unique = Array.from(new Set(types));
+    showToast(
+      `Uyarı: ${unique.length} öğe PDF'e yazılamadı (${unique.join(', ')}). ` +
+        'Dosya kaydedildi ancak bu öğeler eksik.',
+      'error',
+    );
+  };
+
   // Direct Save Handler (Ctrl+S) - Overwrites opened file seamlessly or prompts Save As
   const handleSavePdf = async () => {
     if (!docState.data) return;
+    const redactionQuality = confirmRedactionRasterisation();
+    if (redactionQuality === null) return;
 
     if (currentFilePath) {
       try {
-        const exportedBytes = await exportModifiedPdf(docState);
+        const exportedBytes = await exportModifiedPdf(docState, {
+          onAnnotationFailure: warnOnDroppedAnnotations,
+          redactionQuality,
+        });
         const { invoke } = await import('@tauri-apps/api/core');
         await invoke('write_pdf_file', {
           path: currentFilePath,
           contents: Array.from(exportedBytes),
         });
-        setIsDirty(false);
+        markSaved();
         showToast(`✓ Kaydedildi: ${docState.filename}`, 'success');
         return;
       } catch (err) {
@@ -575,16 +658,33 @@ export function App() {
       }
     }
 
-    // If no existing file path, prompt Save As
-    await handleSaveAsPdf();
+    // If no existing file path, prompt Save As. The already-chosen quality is
+    // threaded through so the user is not asked the same question twice.
+    await handleSaveAsPdf(redactionQuality);
   };
 
-  // Save As Handler (Ctrl+Shift+S) - Native Save Dialog to pick location and name
-  const handleSaveAsPdf = async () => {
+  /**
+   * Save As handler (Ctrl+Shift+S) — native Save dialog, then write.
+   *
+   * @param preChosenQuality Result of a previous prompt, so the fallback path
+   *   out of `handleSavePdf` does not re-ask about redaction resolution.
+   */
+  const handleSaveAsPdf = async (preChosenQuality?: RedactionQuality | null) => {
     if (!docState.data) return;
 
+    let redactionQuality: RedactionQuality | undefined = preChosenQuality ?? undefined;
+    if (redactionQuality === undefined) {
+      // Save As is also reachable directly via Ctrl+Shift+S.
+      const chosen = confirmRedactionRasterisation();
+      if (chosen === null) return;
+      redactionQuality = chosen;
+    }
+
     try {
-      const exportedBytes = await exportModifiedPdf(docState);
+      const exportedBytes = await exportModifiedPdf(docState, {
+        onAnnotationFailure: warnOnDroppedAnnotations,
+        redactionQuality,
+      });
       const defaultName = docState.filename || 'Belge.pdf';
 
       try {
@@ -597,8 +697,8 @@ export function App() {
           });
           const newFilename = chosenPath.split(/[\\/]/).pop() || defaultName;
           setCurrentFilePath(chosenPath);
-          setDocState(prev => ({ ...prev, filename: newFilename }));
-          setIsDirty(false);
+          updateDocSilently((prev) => ({ ...prev, filename: newFilename }));
+          markSaved();
           showToast(`✓ Farklı kaydedildi: ${newFilename}`, 'success');
           return;
         } else {
@@ -616,7 +716,7 @@ export function App() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        setIsDirty(false);
+        markSaved();
         showToast('✓ PDF İndirildi', 'success');
       }
     } catch (err) {
@@ -628,19 +728,33 @@ export function App() {
   // Print PDF Handler
   const handlePrint = async () => {
     if (!docState.data) return;
+    let url: string | null = null;
+    let iframe: HTMLIFrameElement | null = null;
     try {
       const exportedBytes = await exportModifiedPdf(docState);
-      const blob = new Blob([exportedBytes as any], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const iframe = document.createElement('iframe');
+      const blob = new Blob([exportedBytes as BlobPart], { type: 'application/pdf' });
+      url = URL.createObjectURL(blob);
+      iframe = document.createElement('iframe');
       iframe.style.display = 'none';
       iframe.src = url;
       document.body.appendChild(iframe);
       iframe.onload = () => {
-        iframe.contentWindow?.print();
+        iframe?.contentWindow?.print();
       };
     } catch (err) {
       console.error('Print error:', err);
+      showToast('Yazdırma hazırlanamadı: ' + (err as Error).message, 'error');
+    } finally {
+      // The hidden iframe and its blob URL both outlive the print otherwise.
+      // Give the print dialog a moment to pick the document up before tearing
+      // the frame down, then release both.
+      setTimeout(() => {
+        if (iframe) {
+          iframe.onload = null;
+          iframe.remove();
+        }
+        if (url) URL.revokeObjectURL(url);
+      }, 1000);
     }
   };
 
@@ -699,6 +813,9 @@ export function App() {
     updateDocWithHistory((prev) => {
       const newOrder = [...prev.pageOrder];
       const [moved] = newOrder.splice(fromOrderIndex, 1);
+      // A drag that started outside the list would splice out `undefined` and
+      // inject a hole into pageOrder, which every consumer then dereferences.
+      if (moved === undefined) return prev;
       newOrder.splice(toOrderIndex, 0, moved);
       return {
         ...prev,
@@ -754,22 +871,36 @@ export function App() {
   };
 
   const handleUpdateAnnotation = (pageIndex: number, ann: Annotation) => {
-    setDocState((prev) => {
-      const existing = prev.annotations[pageIndex] || [];
-      return {
-        ...prev,
-        annotations: {
-          ...prev.annotations,
-          [pageIndex]: existing.map((item) => (item.id === ann.id ? ann : item)),
-        },
-      };
-    });
+    // Fires on every pointer move of a drag, so it updates the current undo
+    // step in place instead of opening a new one: a whole drag is one Ctrl+Z.
+    updateDocInPlace(
+      (prev) => {
+        const existing = prev.annotations[pageIndex] || [];
+        return {
+          ...prev,
+          annotations: {
+            ...prev.annotations,
+            [pageIndex]: existing.map((item) => (item.id === ann.id ? ann : item)),
+          },
+        };
+      },
+      `drag:${ann.id}`,
+    );
     setSelectedAnnotation(ann);
   };
 
-  const handleDeleteAnnotationById = (pageIndex: number, annId: string) => {
-    updateDocWithHistory((prev) => {
+  /**
+   * @param gestureKey Pass a token when the deletion is one step of a
+   *   continuous eraser sweep, so a drag across ten annotations is a single
+   *   Ctrl+Z instead of ten. Omit it for a discrete delete (Delete key, panel
+   *   button) so that action always stands on its own.
+   */
+  const handleDeleteAnnotationById = (pageIndex: number, annId: string, gestureKey?: string) => {
+    const remove = (prev: PDFDocumentState) => {
       const existing = prev.annotations[pageIndex] || [];
+      // Nothing to do if the annotation is already gone; returning `prev`
+      // unchanged lets the history hook treat it as a no-op.
+      if (!existing.some((item) => item.id === annId)) return prev;
       return {
         ...prev,
         annotations: {
@@ -777,7 +908,14 @@ export function App() {
           [pageIndex]: existing.filter((item) => item.id !== annId),
         },
       };
-    });
+    };
+
+    if (gestureKey !== undefined) {
+      updateDocInPlace(remove, gestureKey);
+    } else {
+      updateDocWithHistory(remove);
+    }
+
     if (selectedAnnotation?.id === annId) {
       setSelectedAnnotation(null);
     }
@@ -805,13 +943,15 @@ export function App() {
   const handleBringForward = () => {
     if (!selectedAnnotation) return;
     const pageIndex = selectedAnnotation.pageIndex;
+    const selectedId = selectedAnnotation.id;
 
-    setDocState((prev) => {
+    updateDocWithHistory((prev) => {
       const list = prev.annotations[pageIndex] || [];
-      const idx = list.findIndex((a) => a.id === selectedAnnotation.id);
+      const idx = list.findIndex((a) => a.id === selectedId);
       if (idx < 0 || idx >= list.length - 1) return prev;
       const nextList = [...list];
       const [item] = nextList.splice(idx, 1);
+      if (item === undefined) return prev;
       nextList.splice(idx + 1, 0, item);
       return {
         ...prev,
@@ -823,13 +963,15 @@ export function App() {
   const handleSendBackward = () => {
     if (!selectedAnnotation) return;
     const pageIndex = selectedAnnotation.pageIndex;
+    const selectedId = selectedAnnotation.id;
 
-    setDocState((prev) => {
+    updateDocWithHistory((prev) => {
       const list = prev.annotations[pageIndex] || [];
-      const idx = list.findIndex((a) => a.id === selectedAnnotation.id);
+      const idx = list.findIndex((a) => a.id === selectedId);
       if (idx <= 0) return prev;
       const nextList = [...list];
       const [item] = nextList.splice(idx, 1);
+      if (item === undefined) return prev;
       nextList.splice(idx - 1, 0, item);
       return {
         ...prev,
@@ -858,8 +1000,10 @@ export function App() {
       const nextAnnotations = { ...prev.annotations };
       Object.keys(watermarkMap).forEach((pIdxStr) => {
         const pIdx = Number(pIdxStr);
+        const additions = watermarkMap[pIdx];
+        if (!additions) return;
         const existing = nextAnnotations[pIdx] || [];
-        nextAnnotations[pIdx] = [...existing, ...watermarkMap[pIdx]];
+        nextAnnotations[pIdx] = [...existing, ...additions];
       });
       return {
         ...prev,
@@ -874,8 +1018,10 @@ export function App() {
       const nextAnnotations = { ...prev.annotations };
       Object.keys(numMap).forEach((pIdxStr) => {
         const pIdx = Number(pIdxStr);
+        const additions = numMap[pIdx];
+        if (!additions) return;
         const existing = nextAnnotations[pIdx] || [];
-        nextAnnotations[pIdx] = [...existing, ...numMap[pIdx]];
+        nextAnnotations[pIdx] = [...existing, ...additions];
       });
       return {
         ...prev,
@@ -914,16 +1060,16 @@ export function App() {
     if (tabs.length <= 1) return;
     const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
     if (currentIndex === -1) return;
-    const nextIndex = (currentIndex + 1) % tabs.length;
-    handleSelectTab(tabs[nextIndex].id);
+    const nextTab = tabs[(currentIndex + 1) % tabs.length];
+    if (nextTab) handleSelectTab(nextTab.id);
   };
 
   const handlePrevTab = () => {
     if (tabs.length <= 1) return;
     const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
     if (currentIndex === -1) return;
-    const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-    handleSelectTab(tabs[prevIndex].id);
+    const prevTab = tabs[(currentIndex - 1 + tabs.length) % tabs.length];
+    if (prevTab) handleSelectTab(prevTab.id);
   };
 
   // Keep actions ref updated for window keyboard listener without rebinding
@@ -1324,6 +1470,7 @@ export function App() {
               onUpdateAnnotation={handleUpdateAnnotation}
               onDeleteAnnotation={handleDeleteAnnotationById}
               zoom={zoom}
+              confirmTextTranslation={settings.confirmTextTranslation}
               pendingSignatureData={pendingSignatureData}
               pendingStampData={pendingStampData}
               pendingImageData={pendingImageData}
@@ -1591,7 +1738,7 @@ export function App() {
             onUpdatePdfData={async (newData) => {
               const buffer = newData.buffer.slice(newData.byteOffset, newData.byteOffset + newData.byteLength);
               await parseAndSetPdf(buffer as ArrayBuffer, docState.filename || 'Belge.pdf', newData.byteLength);
-              setIsDirty(true);
+              markDirty();
             }}
             onShowToast={showToast}
           />
