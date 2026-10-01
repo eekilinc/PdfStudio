@@ -42,8 +42,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       const results: SearchMatch[] = [];
       let matchCounter = 0;
 
-      for (let pIdx = 0; pIdx < docState.pages.length; pIdx++) {
-        const page = docState.pages[pIdx];
+      for (const page of docState.pages) {
         if (page.isDeleted) continue;
 
         const pdfPage = await pdf.getPage(page.originalPageNumber);

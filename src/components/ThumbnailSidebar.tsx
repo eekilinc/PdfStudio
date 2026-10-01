@@ -380,8 +380,8 @@ const ThumbnailCanvas: React.FC<ThumbnailCanvasProps> = ({ docData, pageNumber, 
     if (!el) return;
 
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) setIsVisible(true);
+      (entries) => {
+        if (entries[0]?.isIntersecting) setIsVisible(true);
       },
       { rootMargin: '300px 0px' }
     );
@@ -451,10 +451,10 @@ const ThumbnailCanvas: React.FC<ThumbnailCanvasProps> = ({ docData, pageNumber, 
           let nonWhitePixels = 0;
           const step = Math.max(16, Math.floor(imgData.length / 1000));
           for (let i = 0; i < imgData.length; i += step) {
-            const r = imgData[i];
-            const g = imgData[i + 1];
-            const b = imgData[i + 2];
-            const a = imgData[i + 3];
+            const r = imgData[i] ?? 0;
+            const g = imgData[i + 1] ?? 0;
+            const b = imgData[i + 2] ?? 0;
+            const a = imgData[i + 3] ?? 0;
             if (a > 30 && (r < 235 || g < 235 || b < 235)) {
               nonWhitePixels++;
               if (nonWhitePixels >= 5) break;

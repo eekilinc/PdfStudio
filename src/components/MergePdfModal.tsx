@@ -48,10 +48,14 @@ export const MergePdfModal: React.FC<MergePdfModalProps> = ({
   const handleMove = (index: number, direction: 'up' | 'down') => {
     const newItems = [...items];
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    // Both ends must be in range: indexing past either end yields undefined,
+    // and swapping in an undefined hole would blank a row.
     if (targetIndex < 0 || targetIndex >= newItems.length) return;
-    const temp = newItems[index];
-    newItems[index] = newItems[targetIndex];
-    newItems[targetIndex] = temp;
+    const current = newItems[index];
+    const target = newItems[targetIndex];
+    if (current === undefined || target === undefined) return;
+    newItems[index] = target;
+    newItems[targetIndex] = current;
     setItems(newItems);
   };
 

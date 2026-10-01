@@ -126,9 +126,9 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
 
         // Remove white / light backgrounds
         for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
+          const r = data[i] ?? 0;
+          const g = data[i + 1] ?? 0;
+          const b = data[i + 2] ?? 0;
           const brightness = (r + g + b) / 3;
 
           if (brightness > 210) {

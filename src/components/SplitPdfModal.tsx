@@ -37,7 +37,7 @@ export const SplitPdfModal: React.FC<SplitPdfModalProps> = ({ isOpen, onClose, d
 
     parts.forEach((part) => {
       if (part.includes('-')) {
-        const [startStr, endStr] = part.split('-');
+        const [startStr = '', endStr = ''] = part.split('-');
         const start = Math.max(1, parseInt(startStr, 10));
         const end = Math.min(max, parseInt(endStr, 10));
         if (!isNaN(start) && !isNaN(end)) {
@@ -70,7 +70,12 @@ export const SplitPdfModal: React.FC<SplitPdfModalProps> = ({ isOpen, onClose, d
         }
 
         const outDoc = await PDFDocument.create();
-        const pageIndicesToCopy = targetPageNumbers.map((num) => activePages[num - 1].originalPageNumber - 1);
+        // Filter rather than map-then-trust: a page number that is not in the
+        // active list must be dropped, not passed through as NaN.
+        const pageIndicesToCopy = targetPageNumbers
+          .map((num) => activePages[num - 1])
+          .filter((p): p is NonNullable<typeof p> => p !== undefined)
+          .map((p) => p.originalPageNumber - 1);
         const copied = await outDoc.copyPages(srcDoc, pageIndicesToCopy);
         copied.forEach((p) => outDoc.addPage(p));
 
@@ -79,8 +84,10 @@ export const SplitPdfModal: React.FC<SplitPdfModalProps> = ({ isOpen, onClose, d
       } else if (splitMode === 'single') {
         // Download each page individually
         for (let i = 0; i < totalPages; i++) {
+          const source = activePages[i];
+          if (!source) continue;
           const outDoc = await PDFDocument.create();
-          const [copied] = await outDoc.copyPages(srcDoc, [activePages[i].originalPageNumber - 1]);
+          const [copied] = await outDoc.copyPages(srcDoc, [source.originalPageNumber - 1]);
           outDoc.addPage(copied);
 
           const bytes = await outDoc.save();

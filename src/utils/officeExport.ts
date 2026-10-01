@@ -299,6 +299,7 @@ export async function extractStructuredPage(
 
   for (let i = 0; i < processedLines.length; i++) {
     const pline = processedLines[i];
+    if (!pline) continue;
     plainTextLines.push(pline.fullText);
     tableMatrix.push(pline.cells);
 
@@ -352,8 +353,11 @@ export async function extractStructuredPage(
 
     // Normal paragraph line
     // Check vertical gap to decide if it continues or starts new paragraph
-    if (i > 0) {
-      const prevLine = processedLines[i - 1];
+    // Compare against the previous *line* only when there is one. The original
+    // read `processedLines[i - 1]` unguarded, so it could measure the gap
+    // against a heading or table row and split paragraphs on a wrong baseline.
+    const prevLine = i > 0 ? processedLines[i - 1] : undefined;
+    if (prevLine) {
       const gap = prevLine.y - pline.y;
       if (gap > Math.max(pline.maxHeight * 1.8, 16)) {
         flushParagraph();
@@ -801,13 +805,15 @@ ${sldIdLstXml}  </p:sldIdLst>
   pages.forEach((p, idx) => {
     const slideNum = idx + 1;
 
-    // Detect slide title: First heading or first plain line
+    // Detect slide title: First heading or first plain line.
+    // Trimmed, since a full-width line of body text would overflow the title box.
     let titleText = `Slayt ${p.pageNum}`;
-    const firstHeading = p.blocks.find(b => b.type === 'heading');
+    const firstHeading = p.blocks.find((b) => b.type === 'heading');
     if (firstHeading && firstHeading.type === 'heading') {
       titleText = firstHeading.text;
-    } else if (p.plainTextLines.length > 0) {
-      titleText = p.plainTextLines[0];
+    } else {
+      const firstLine = p.plainTextLines[0];
+      if (firstLine) titleText = firstLine.length > 120 ? `${firstLine.slice(0, 117)}…` : firstLine;
     }
 
     // Body items: Bullet points and text blocks
