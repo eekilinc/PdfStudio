@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Copy, Check, Edit3, Globe, Loader2, Trash2 } from 'lucide-react';
 import type { 
   PDFDocumentState, 
@@ -30,7 +30,7 @@ interface PDFViewerProps {
   onSelectAnnotation: (ann: Annotation | null) => void;
   onAddAnnotation: (pageIndex: number, ann: Annotation) => void;
   onUpdateAnnotation: (pageIndex: number, ann: Annotation) => void;
-  onDeleteAnnotation: (pageIndex: number, annotationId: string) => void;
+  onDeleteAnnotation: (pageIndex: number, annotationId: string, gestureKey?: string) => void;
   zoom: number;
   pendingSignatureData: string | null;
   pendingStampData: Partial<StampAnnotation> | null;
@@ -42,6 +42,44 @@ interface PDFViewerProps {
   activeMatchIndex?: number;
   readerFilter?: ReaderFilter;
   onZoomChange?: (newZoom: number) => void;
+  /** Whether to prompt before sending a selection to the translation service. */
+  confirmTextTranslation?: boolean;
+}
+
+interface PageItemProps {
+  registerRef: (pageIndex: number) => (el: HTMLDivElement | null) => void;
+  pageIndex: number;
+  isCurrentPage: boolean;
+  confirmTextTranslation: boolean;
+}
+
+/** Zoom bounds, matching the shortcuts advertised in the README. */
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 4.0;
+/** Scale change applied per wheel notch. */
+const ZOOM_STEP = 0.12;
+
+/**
+ * Shared empty annotation list.
+ *
+ * Used as the fallback for pages with no annotations. A fresh `[]` literal on
+ * every render gave the prop a new identity each time, which alone defeated
+ * memoisation and re-ran the overlay effect for every page on every state
+ * change — including each pointer move of a drag.
+ */
+const EMPTY_ANNOTATIONS: readonly Annotation[] = [];
+
+/** Assigns a stable numeric id to each document buffer. Weak, so it self-clears. */
+const documentIds = new WeakMap<ArrayBuffer, number>();
+let nextDocumentId = 1;
+
+function documentIdFor(data: ArrayBuffer): number {
+  const existing = documentIds.get(data);
+  if (existing !== undefined) return existing;
+  const id = nextDocumentId;
+  nextDocumentId += 1;
+  documentIds.set(data, id);
+  return id;
 }
 
 export const PDFViewer: React.FC<PDFViewerProps> = ({
@@ -65,9 +103,17 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   activeMatchIndex = -1,
   readerFilter = 'normal',
   onZoomChange,
+  confirmTextTranslation = true,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  // Stable per-document id, used as a React `key` fragment so pages carried
+  // over from another document (a tab switch) remount with fresh local state
+  // instead of briefly showing the previous document's text layer.
+  //
+  // A WeakMap keyed by the document's own buffer gives identity without reading
+  // or writing a ref during render. Weak, so closed documents are collectable.
+  const documentId = docState.data ? documentIdFor(docState.data) : 'empty';
 
   // Pan tool state
   const [isPanning, setIsPanning] = useState(false);
@@ -81,23 +127,75 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     const el = containerRef.current;
     if (!el) return;
 
+    // A trackpad or high-resolution wheel emits a burst of events per gesture.
+    // Without coalescing, every tick re-runs the background render effect for
+    // all pages at once, so one flick of the wheel re-rasterised the document
+    // dozens of times. Coalesce to one change per animation frame.
+    let pending: number | null = null;
+    let frame: number | null = null;
+
+    const flush = () => {
+      frame = null;
+      if (pending === null) return;
+      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pending));
+      pending = null;
+      onZoomChange?.(next);
+    };
+
     const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey) {
-        e.preventDefault();
-        const delta = e.deltaY < 0 ? 0.12 : -0.12;
-        if (onZoomChange) {
-          onZoomChange(Math.min(4.0, Math.max(0.25, Math.round((zoom + delta) * 100) / 100)));
-        }
-      }
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      // Accumulate on top of the not-yet-applied target so rapid events in the
+      // same frame compose instead of each snapping back to `zoom`.
+      const base = pending ?? zoom;
+      pending = Math.round((base + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)) * 100) / 100;
+      if (frame === null) frame = requestAnimationFrame(flush);
     };
 
     el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => el.removeEventListener('wheel', handleWheel);
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
   }, [zoom, onZoomChange]);
 
   const activePages = docState.pageOrder
-    .map(idx => docState.pages.find(p => p.pageIndex === idx))
+    .map((idx) => docState.pages.find((p) => p.pageIndex === idx))
     .filter((p): p is PageState => p !== undefined && !p.isDeleted);
+
+  // Stable per-page callbacks and a shared empty array.
+  //
+  // Building these inline on every render gave every PageItem fresh prop
+  // identities, so a memoised PageItem could never bail out: one pointer move
+  // while dragging re-rendered every page in the document. A new `[]` for
+  // annotation-less pages did the same thing, defeating the memo on its own.
+  const registerPageRef = useCallback((pageIndex: number) => {
+    return (el: HTMLDivElement | null) => {
+      if (el) pageRefs.current.set(pageIndex, el);
+      else pageRefs.current.delete(pageIndex);
+    };
+  }, []);
+
+  const selectPage = useCallback(
+    (pageIndex: number) => () => onPageChange(pageIndex),
+    [onPageChange],
+  );
+
+  const addAnnotationFor = useCallback(
+    (pageIndex: number) => (ann: Annotation) => onAddAnnotation(pageIndex, ann),
+    [onAddAnnotation],
+  );
+
+  const updateAnnotationFor = useCallback(
+    (pageIndex: number) => (ann: Annotation) => onUpdateAnnotation(pageIndex, ann),
+    [onUpdateAnnotation],
+  );
+
+  const deleteAnnotationFor = useCallback(
+    (pageIndex: number) => (annId: string, gestureKey?: string) =>
+      onDeleteAnnotation(pageIndex, annId, gestureKey),
+    [onDeleteAnnotation],
+  );
 
   // Smooth scroll to selected page ONLY within containerRef, never scrolling window/navbar
   useEffect(() => {
@@ -129,7 +227,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   }, [currentPageIndex]);
 
   // Handle Pan Dragging
-  const handleMouseDownViewer = (e: React.MouseEvent) => {
+  const handleMouseDownViewer = (e: React.PointerEvent) => {
     if (activeConfig.tool === 'pan' || e.button === 1) {
       setIsPanning(true);
       setPanStart({ x: e.clientX, y: e.clientY });
@@ -137,7 +235,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     }
   };
 
-  const handleMouseMoveViewer = (e: React.MouseEvent) => {
+  const handleMouseMoveViewer = (e: React.PointerEvent) => {
     if (isPanning && containerRef.current) {
       const dx = e.clientX - panStart.x;
       const dy = e.clientY - panStart.y;
@@ -147,16 +245,17 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     }
   };
 
-  const handleMouseUpViewer = () => {
+  const handlePointerUpViewer = () => {
     setIsPanning(false);
   };
 
   return (
     <div
       ref={containerRef}
-      onMouseDown={handleMouseDownViewer}
-      onMouseMove={handleMouseMoveViewer}
-      onMouseUp={handleMouseUpViewer}
+      onPointerDown={handleMouseDownViewer}
+      onPointerMove={handleMouseMoveViewer}
+      onPointerUp={handlePointerUpViewer}
+      onPointerCancel={handlePointerUpViewer}
       style={{
         flex: 1,
         height: '100%',
@@ -199,25 +298,27 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
 
       {activePages.map((page, index) => (
         <PageItem
-          key={page.pageIndex}
-          refCallback={(el) => {
-            if (el) pageRefs.current.set(page.pageIndex, el);
-            else pageRefs.current.delete(page.pageIndex);
-          }}
+          // Remounting on document change clears the page's local state — the
+          // text layer, the visibility latch and the image cache all belong to
+          // one document and are meaningless in the next.
+          key={`${documentId}:${page.pageIndex}`}
+          pageIndex={page.pageIndex}
+          registerRef={registerPageRef}
           isCurrentPage={page.pageIndex === currentPageIndex}
+          confirmTextTranslation={confirmTextTranslation}
           pageOrderNumber={index + 1}
           totalPages={activePages.length}
           docData={docState.data}
           page={page}
           zoom={zoom}
           activeConfig={activeConfig}
-          annotations={docState.annotations[page.pageIndex] || []}
+          annotations={docState.annotations[page.pageIndex] || EMPTY_ANNOTATIONS}
           selectedAnnotation={selectedAnnotation}
           onSelectAnnotation={onSelectAnnotation}
-          onSelectThisPage={() => onPageChange(page.pageIndex)}
-          onAddAnnotation={(ann) => onAddAnnotation(page.pageIndex, ann)}
-          onUpdateAnnotation={(ann) => onUpdateAnnotation(page.pageIndex, ann)}
-          onDeleteAnnotation={(annId) => onDeleteAnnotation(page.pageIndex, annId)}
+          onSelectThisPage={selectPage(page.pageIndex)}
+          onAddAnnotation={addAnnotationFor(page.pageIndex)}
+          onUpdateAnnotation={updateAnnotationFor(page.pageIndex)}
+          onDeleteAnnotation={deleteAnnotationFor(page.pageIndex)}
           pendingSignatureData={pendingSignatureData}
           pendingStampData={pendingStampData}
           pendingImageData={pendingImageData}
@@ -236,7 +337,8 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
 };
 
 interface PageItemProps {
-  refCallback: (el: HTMLDivElement | null) => void;
+  registerRef: (pageIndex: number) => (el: HTMLDivElement | null) => void;
+  pageIndex: number;
   isCurrentPage: boolean;
   pageOrderNumber: number;
   totalPages: number;
@@ -244,13 +346,13 @@ interface PageItemProps {
   page: PageState;
   zoom: number;
   activeConfig: ActiveToolConfig;
-  annotations: Annotation[];
+  annotations: readonly Annotation[];
   selectedAnnotation: Annotation | null;
   onSelectAnnotation: (ann: Annotation | null) => void;
   onSelectThisPage: () => void;
   onAddAnnotation: (ann: Annotation) => void;
   onUpdateAnnotation: (ann: Annotation) => void;
-  onDeleteAnnotation: (annId: string) => void;
+  onDeleteAnnotation: (annId: string, gestureKey?: string) => void;
   pendingSignatureData: string | null;
   pendingStampData: Partial<StampAnnotation> | null;
   pendingImageData: string | null;
@@ -263,6 +365,12 @@ interface PageItemProps {
   activeMatchIndex: number;
   readerFilter: ReaderFilter;
 }
+
+/**
+ * Undo-grouping token for the eraser. Every annotation removed during one
+ * press-and-sweep shares it, so the whole sweep collapses into a single step.
+ */
+const ERASE_GESTURE = 'erase';
 
 function detectFontProperties(fontName?: string) {
   if (!fontName) {
@@ -292,8 +400,9 @@ function detectFontProperties(fontName?: string) {
   };
 }
 
-const PageItem: React.FC<PageItemProps> = ({
-  refCallback,
+const PageItemImpl: React.FC<PageItemProps> = ({
+  registerRef,
+  pageIndex,
   isCurrentPage,
   pageOrderNumber,
   totalPages,
@@ -319,6 +428,7 @@ const PageItem: React.FC<PageItemProps> = ({
   searchMatches,
   activeMatchIndex,
   readerFilter,
+  confirmTextTranslation,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -337,6 +447,19 @@ const PageItem: React.FC<PageItemProps> = ({
   const [selectionPosition, setSelectionPosition] = useState<Point | null>(null);
   const [translatedText, setTranslatedText] = useState<string | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
+  // Lets an in-flight translation be cancelled if the page unmounts first.
+  const translateAbortRef = useRef<AbortController | null>(null);
+  // Whether the user has agreed to send text to the translation service during
+  // this session. Session-scoped on purpose: consent is not a setting, it is a
+  // one-off decision about a specific action.
+  const translateConsentRef = useRef(false);
+
+  useEffect(
+    () => () => {
+      translateAbortRef.current?.abort();
+    },
+    [],
+  );
   const [copiedFeedback, setCopiedFeedback] = useState(false);
   const [renderTrigger, setRenderTrigger] = useState(0);
   const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
@@ -351,9 +474,9 @@ const PageItem: React.FC<PageItemProps> = ({
       const sampleX = Math.max(0, Math.min(canvas.width - 1, Math.floor((pdfX - 2) * scaleX)));
       const sampleY = Math.max(0, Math.min(canvas.height - 1, Math.floor((pdfY - 2) * scaleY)));
       const pixel = ctx.getImageData(sampleX, sampleY, 1, 1).data;
-      const r = pixel[0];
-      const g = pixel[1];
-      const b = pixel[2];
+      const r = pixel[0] ?? 0;
+      const g = pixel[1] ?? 0;
+      const b = pixel[2] ?? 0;
       const bg = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
       const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
       const fg = lum < 0.5 ? '#ffffff' : '#0f172a';
@@ -373,25 +496,62 @@ const PageItem: React.FC<PageItemProps> = ({
   const [dragStartOffset, setDragStartOffset] = useState<Point>({ x: 0, y: 0 });
   const [isMouseDownOnOverlay, setIsMouseDownOnOverlay] = useState(false);
 
+  /**
+   * Clear every latched interaction flag.
+   *
+   * Pointer capture on the canvas already delivers the release to our own
+   * handler when the cursor strays outside. These listeners are the backstop for
+   * the cases capture cannot cover: the canvas being unmounted mid-gesture, the
+   * pointer being cancelled, or the window losing focus. Without them the
+   * `isMouseDownOnOverlay` flag could stay latched, and the eraser branch in
+   * `handlePointerMove` then deleted annotations on a bare hover.
+   */
+  const resetInteraction = useCallback(() => {
+    setIsMouseDownOnOverlay(false);
+    setIsDraggingAnn(false);
+    setIsDrawing(false);
+    setShapeStart(null);
+    setCurrentShapePreview(null);
+  }, []);
+
+  useEffect(() => {
+    const onWindowRelease = (e: Event) => {
+      // A release that landed on our own canvas is handled there — it is the
+      // one that has to commit the stroke or shape being drawn.
+      if (e.type === 'pointerup' && overlayCanvasRef.current?.contains(e.target as Node | null)) return;
+      resetInteraction();
+    };
+
+    window.addEventListener('pointerup', onWindowRelease);
+    window.addEventListener('pointercancel', onWindowRelease);
+    window.addEventListener('blur', onWindowRelease);
+    return () => {
+      window.removeEventListener('pointerup', onWindowRelease);
+      window.removeEventListener('pointercancel', onWindowRelease);
+      window.removeEventListener('blur', onWindowRelease);
+    };
+  }, [resetInteraction]);
+
   const rawWidth = page.width && page.width > 50 ? page.width : 595.28;
   const rawHeight = page.height && page.height > 50 ? page.height : 841.89;
   const pageWidth = Math.round(rawWidth * zoom);
   const pageHeight = Math.round(rawHeight * zoom);
 
   useEffect(() => {
+    const attach = registerRef(pageIndex);
     if (containerRef.current) {
-      refCallback(containerRef.current);
+      attach(containerRef.current);
     }
-    return () => refCallback(null);
-  }, [refCallback]);
+    return () => attach(null);
+  }, [registerRef, pageIndex]);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) setIsVisible(true);
+      (entries) => {
+        if (entries[0]?.isIntersecting) setIsVisible(true);
       },
       { rootMargin: '600px 0px' }
     );
@@ -473,10 +633,10 @@ const PageItem: React.FC<PageItemProps> = ({
             // Step across the entire canvas (sample ~3000 points evenly)
             const step = Math.max(16, Math.floor(imgData.length / 3000));
             for (let i = 0; i < imgData.length; i += step) {
-              const r = imgData[i];
-              const g = imgData[i + 1];
-              const b = imgData[i + 2];
-              const a = imgData[i + 3];
+              const r = imgData[i] ?? 0;
+              const g = imgData[i + 1] ?? 0;
+              const b = imgData[i + 2] ?? 0;
+              const a = imgData[i + 3] ?? 0;
               // Non-white drawing (text, shapes, raster)
               if (a > 30 && (r < 235 || g < 235 || b < 235)) {
                 nonWhitePixels++;
@@ -589,6 +749,8 @@ const PageItem: React.FC<PageItemProps> = ({
 
       switch (ann.type) {
         case 'redact': {
+          // Preview only. Saving rasterises the page and burns this box into the
+          // pixels, which is what actually destroys the text underneath.
           ctx.fillStyle = ann.color || '#000000';
           ctx.fillRect(ann.x, ann.y, ann.width, ann.height);
           break;
@@ -664,9 +826,17 @@ const PageItem: React.FC<PageItemProps> = ({
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
             ctx.beginPath();
-            ctx.moveTo(draw.points[0].x, draw.points[0].y);
+            // Seeded from the first point only when one exists: a stroke with
+            // no points would throw on `moveTo(undefined.x)`.
+            const first = draw.points[0];
+            if (!first) {
+              ctx.restore();
+              return;
+            }
+            ctx.moveTo(first.x, first.y);
             for (let i = 1; i < draw.points.length; i++) {
-              ctx.lineTo(draw.points[i].x, draw.points[i].y);
+              const p = draw.points[i];
+              if (p) ctx.lineTo(p.x, p.y);
             }
             ctx.stroke();
           }
@@ -696,10 +866,20 @@ const PageItem: React.FC<PageItemProps> = ({
             ctx.fillStyle = textAnn.color;
           }
 
+          // Alignment applied here as well, so the preview and the exported
+          // file agree. The exporter honours the same three cases.
           const lines = textAnn.text.split('\n');
           const lineHeight = (textAnn.fontSize || 14) * 1.25;
           lines.forEach((line, i) => {
-            ctx.fillText(line, textAnn.x, textAnn.y + i * lineHeight);
+            const lineWidth = ctx.measureText(line).width;
+            const boxWidth = textAnn.width || lineWidth;
+            const lineX =
+              textAnn.textAlign === 'center'
+                ? textAnn.x + (boxWidth - lineWidth) / 2
+                : textAnn.textAlign === 'right'
+                  ? textAnn.x + boxWidth - lineWidth
+                  : textAnn.x;
+            ctx.fillText(line, lineX, textAnn.y + i * lineHeight);
           });
           ctx.restore();
           break;
@@ -836,12 +1016,16 @@ const PageItem: React.FC<PageItemProps> = ({
         ? (activeConfig.opacity !== undefined && activeConfig.opacity < 1 ? activeConfig.opacity : 0.4) 
         : (activeConfig.opacity !== undefined ? activeConfig.opacity : 1.0);
 
-      ctx.beginPath();
-      ctx.moveTo(drawingPoints[0].x, drawingPoints[0].y);
-      for (let i = 1; i < drawingPoints.length; i++) {
-        ctx.lineTo(drawingPoints[i].x, drawingPoints[i].y);
+      const liveStart = drawingPoints[0];
+      if (liveStart) {
+        ctx.beginPath();
+        ctx.moveTo(liveStart.x, liveStart.y);
+        for (let i = 1; i < drawingPoints.length; i++) {
+          const p = drawingPoints[i];
+          if (p) ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
       ctx.restore();
     }
 
@@ -899,7 +1083,7 @@ const PageItem: React.FC<PageItemProps> = ({
     }
   }, [annotations, selectedAnnotation, currentShapePreview, isDrawing, drawingPoints, zoom, editingTextId, activeConfig, pageWidth, pageHeight, rawWidth, rawHeight, searchMatches, activeMatchIndex, renderTrigger, shapeStart, isVisible, page.pageIndex]);
 
-  const getPdfCoords = (e: React.MouseEvent<HTMLCanvasElement>): Point => {
+  const getPdfCoords = (e: React.PointerEvent<HTMLCanvasElement>): Point => {
     const rect = overlayCanvasRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
     return {
@@ -909,39 +1093,56 @@ const PageItem: React.FC<PageItemProps> = ({
   };
 
   const findHitAnnotation = (pt: Point) => {
-    return [...annotations].reverse().find((ann) => {
-      if (ann.type === 'pen' || ann.type === 'highlighter') {
-        const draw = ann as DrawingAnnotation;
-        if (draw.points && draw.points.length > 0) {
-          const hitRadius = Math.max((draw.strokeWidth || 4) + 10, 20);
-          return draw.points.some((p) => Math.hypot(p.x - pt.x, p.y - pt.y) <= hitRadius);
+    // Walk backwards to hit the topmost annotation, without materialising a
+    // reversed copy of the list on every pointer move.
+    for (let i = annotations.length - 1; i >= 0; i -= 1) {
+      const ann = annotations[i];
+      if (ann && annotationHitsPoint(ann, pt)) return ann;
+    }
+    return undefined;
+  };
+
+  /**
+   * Point-in-annotation test, in PDF point space.
+   *
+   * Freehand strokes and straight lines are tested against their geometry
+   * rather than their bounding box, so a long diagonal stroke is still
+   * selectable along its length and not just near its corners.
+   */
+  const annotationHitsPoint = (ann: Annotation, pt: Point): boolean => {
+    if (ann.type === 'pen' || ann.type === 'highlighter') {
+      const draw = ann as DrawingAnnotation;
+      if (draw.points && draw.points.length > 0) {
+        const hitRadius = Math.max((draw.strokeWidth || 4) + 10, 20);
+        return draw.points.some((p) => Math.hypot(p.x - pt.x, p.y - pt.y) <= hitRadius);
+      }
+    }
+
+    if (ann.type === 'line' || ann.type === 'arrow') {
+      const shape = ann as ShapeAnnotation;
+      const x1 = shape.x;
+      const y1 = shape.y;
+      const x2 = shape.endX !== undefined ? shape.endX : shape.x + shape.width;
+      const y2 = shape.endY !== undefined ? shape.endY : shape.y + shape.height;
+      const lineLen = Math.hypot(x2 - x1, y2 - y1);
+      if (lineLen > 0) {
+        const dist = Math.abs((y2 - y1) * pt.x - (x2 - x1) * pt.y + x2 * y1 - y2 * x1) / lineLen;
+        const minX = Math.min(x1, x2) - 12;
+        const maxX = Math.max(x1, x2) + 12;
+        const minY = Math.min(y1, y2) - 12;
+        const maxY = Math.max(y1, y2) + 12;
+        if (dist < 16 && pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY) {
+          return true;
         }
       }
-      if (ann.type === 'line' || ann.type === 'arrow') {
-        const shape = ann as ShapeAnnotation;
-        const x1 = shape.x;
-        const y1 = shape.y;
-        const x2 = shape.endX !== undefined ? shape.endX : shape.x + shape.width;
-        const y2 = shape.endY !== undefined ? shape.endY : shape.y + shape.height;
-        const lineLen = Math.hypot(x2 - x1, y2 - y1);
-        if (lineLen > 0) {
-          const dist = Math.abs((y2 - y1) * pt.x - (x2 - x1) * pt.y + x2 * y1 - y2 * x1) / lineLen;
-          const minX = Math.min(x1, x2) - 12;
-          const maxX = Math.max(x1, x2) + 12;
-          const minY = Math.min(y1, y2) - 12;
-          const maxY = Math.max(y1, y2) + 12;
-          if (dist < 16 && pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY) {
-            return true;
-          }
-        }
-      }
-      return (
-        pt.x >= ann.x - 10 &&
-        pt.x <= ann.x + ann.width + 10 &&
-        pt.y >= ann.y - 10 &&
-        pt.y <= ann.y + ann.height + 10
-      );
-    });
+    }
+
+    return (
+      pt.x >= ann.x - 10 &&
+      pt.x <= ann.x + ann.width + 10 &&
+      pt.y >= ann.y - 10 &&
+      pt.y <= ann.y + ann.height + 10
+    );
   };
 
   // Text selection handler for copying & translation
@@ -988,23 +1189,53 @@ const PageItem: React.FC<PageItemProps> = ({
     }
   };
 
-  // Instant Translate
+  /**
+   * Translate the current selection to Turkish.
+   *
+   * This is the one feature that leaves the machine: the selected text is sent
+   * to a third-party translation service. It is confirmed with the user first,
+   * capped, and aborted on unmount, so a stray click cannot quietly upload a
+   * document fragment to an external host.
+   */
   const handleTranslateSelectedText = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!selectedText) return;
+
+    // Asked once per session by default. The user can drop the prompt entirely
+    // in Settings, and re-enable it there.
+    if (confirmTextTranslation && !translateConsentRef.current) {
+      const approved = window.confirm(
+        `Seçili metin çeviri için üçüncü taraf bir servise gönderilecek:\n\n` +
+          `"${selectedText.slice(0, 200)}${selectedText.length > 200 ? '…' : ''}"\n\n` +
+          'Bu oturum boyunca bir daha sorulmadan çeviriye devam edilsin mi?',
+      );
+      if (!approved) return;
+      translateConsentRef.current = true;
+    }
+
     setIsTranslating(true);
 
+    const controller = new AbortController();
+    translateAbortRef.current = controller;
+
     try {
-      const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(selectedText.slice(0, 400))}&langpair=autodetect|tr`);
+      const res = await fetch(
+        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(selectedText.slice(0, 400))}&langpair=autodetect|tr`,
+        { signal: controller.signal },
+      );
       const json = await res.json();
       if (json?.responseData?.translatedText) {
         setTranslatedText(json.responseData.translatedText);
       } else {
         setTranslatedText(selectedText);
       }
-    } catch {
-      setTranslatedText('Çeviri servisine ulaşılamadı.');
+    } catch (err) {
+      // An abort is a deliberate cancellation, not a failure to report.
+      if ((err as Error).name !== 'AbortError') {
+        setTranslatedText('Çeviri servisine ulaşılamadı.');
+      }
     } finally {
+      translateAbortRef.current = null;
       setIsTranslating(false);
     }
   };
@@ -1055,7 +1286,7 @@ const PageItem: React.FC<PageItemProps> = ({
     onSelectAnnotation(null);
   };
 
-  const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleDoubleClick = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const pt = getPdfCoords(e);
     const hit = findHitAnnotation(pt);
     if (hit && hit.type === 'text') {
@@ -1064,7 +1295,19 @@ const PageItem: React.FC<PageItemProps> = ({
     }
   };
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Capture the pointer so the rest of the gesture keeps arriving here even
+    // when the cursor leaves the canvas — or the canvas is covered by an
+    // element that mounts mid-gesture, such as the inline text editor.
+    // Without this, releasing the button outside the canvas left the
+    // interaction flags latched, and the eraser then deleted annotations on a
+    // bare hover with no button held.
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Capture is best-effort; the window-level safety net below covers the gap.
+    }
+
     onSelectThisPage();
     setIsMouseDownOnOverlay(true);
     if (activeConfig.tool === 'pan' || activeConfig.tool === 'edit-text') return;
@@ -1072,7 +1315,9 @@ const PageItem: React.FC<PageItemProps> = ({
 
     if (activeConfig.tool === 'eraser') {
       const hit = findHitAnnotation(pt);
-      if (hit) onDeleteAnnotation(hit.id);
+      // Same gesture token as the drag below, so a click-and-sweep that starts
+      // on the first annotation and crosses several more stays a single undo step.
+      if (hit) onDeleteAnnotation(hit.id, ERASE_GESTURE);
       return;
     }
 
@@ -1203,12 +1448,14 @@ const PageItem: React.FC<PageItemProps> = ({
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Ignore synthetic moves from a device that is not actually pressing.
+    if (e.pointerType === 'mouse' && e.buttons === 0 && !isMouseDownOnOverlay) return;
     const pt = getPdfCoords(e);
 
     if (activeConfig.tool === 'eraser' && isMouseDownOnOverlay) {
       const hit = findHitAnnotation(pt);
-      if (hit) onDeleteAnnotation(hit.id);
+      if (hit) onDeleteAnnotation(hit.id, ERASE_GESTURE);
       return;
     }
 
@@ -1240,18 +1487,39 @@ const PageItem: React.FC<PageItemProps> = ({
     }
   };
 
-  const handleMouseUp = () => {
-    setIsMouseDownOnOverlay(false);
-    if (isDraggingAnn) {
-      setIsDraggingAnn(false);
+  const handlePointerUp = (e?: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // Already released, or never captured.
+      }
     }
 
-    if (isDrawing && drawingPoints.length > 1) {
-      setIsDrawing(false);
-      const minX = Math.min(...drawingPoints.map((p) => p.x));
-      const maxX = Math.max(...drawingPoints.map((p) => p.x));
-      const minY = Math.min(...drawingPoints.map((p) => p.y));
-      const maxY = Math.max(...drawingPoints.map((p) => p.y));
+    setIsMouseDownOnOverlay(false);
+    setIsDraggingAnn(false);
+
+    // Always end the stroke, even a degenerate one: a pen click with no
+    // movement must not leave the tool latched into drawing mode, where the
+    // next stray mouse move would silently extend it into a real stroke.
+    const stroke = isDrawing ? drawingPoints : [];
+    setIsDrawing(false);
+    setDrawingPoints([]);
+
+    if (stroke.length > 1) {
+      // Folded rather than spread: a long freehand stroke can hold tens of
+      // thousands of points, and `Math.min(...points)` passes them all as
+      // function arguments, which overflows the argument limit.
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const p of stroke) {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      }
 
       onAddAnnotation({
         id: Math.random().toString(36).substring(2, 9),
@@ -1266,9 +1534,8 @@ const PageItem: React.FC<PageItemProps> = ({
         opacity: activeConfig.tool === 'highlighter' 
           ? (activeConfig.opacity !== undefined && activeConfig.opacity < 1 ? activeConfig.opacity : 0.4) 
           : (activeConfig.opacity !== undefined ? activeConfig.opacity : 1.0),
-        points: drawingPoints,
+        points: stroke,
       } as DrawingAnnotation);
-      setDrawingPoints([]);
       return;
     }
 
@@ -1638,9 +1905,9 @@ const PageItem: React.FC<PageItemProps> = ({
       {/* Interactive Overlay Canvas for Drawing/Shapes/Measurement */}
       <canvas
         ref={overlayCanvasRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
         onDoubleClick={handleDoubleClick}
         style={{
           position: 'absolute',
@@ -1727,3 +1994,13 @@ const PageItem: React.FC<PageItemProps> = ({
     </div>
   );
 };
+
+/**
+ * A page re-renders only when something it actually draws has changed.
+ *
+ * Without this, dragging a single annotation repainted the overlay canvas of
+ * every page in the document at pointer-move frequency: both canvases per page
+ * were reallocated and the whole annotation list redrawn each time.
+ */
+const PageItem = memo(PageItemImpl);
+PageItem.displayName = 'PageItem';
