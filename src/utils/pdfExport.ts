@@ -1,6 +1,22 @@
-import { PDFDocument, rgb, degrees, StandardFonts, PDFPage, LineCapStyle } from 'pdf-lib';
+import {
+  PDFDocument,
+  PDFArray,
+  PDFDict,
+  PDFHexString,
+  PDFName,
+  PDFNull,
+  PDFNumber,
+  PDFRef,
+  PDFString,
+  rgb,
+  degrees,
+  StandardFonts,
+  PDFPage,
+  LineCapStyle,
+} from 'pdf-lib';
 import type { PDFFont } from 'pdf-lib';
 import { applyRedactions, collectRedactions, type RedactionQuality } from './redaction';
+import { APP_NAME, APP_VERSION } from '../version';
 import type { Annotation, PDFDocumentState, TextAnnotation, DrawingAnnotation, ShapeAnnotation, SignatureAnnotation, StampAnnotation } from '../types/pdf';
 
 /**
@@ -54,6 +70,230 @@ export function toWinAnsi(str: string): string {
       // substituted, since a wrong glyph would misrepresent the text.
       .replace(/[^\x20-\x7E\xA0-\xFF]/g, '')
   );
+}
+
+/**
+ * Carry the source document's metadata across.
+ *
+ * The exporter builds a fresh document and copies pages, so without this every
+ * save dropped the title, author, subject, keywords and producer. Those are the
+ * fields a reader sees in their file properties, and a document that had been
+ * catalogued would silently lose its catalogue record on the first Ctrl+S.
+ *
+ * `setProducer` and `setCreator` are intentionally *not* copied: they identify
+ * the tool, and the output really was produced by this application. The creation
+ * date is left for pdf-lib to stamp, since a round trip should reflect when the
+ * file was last written.
+ */
+function copyDocumentInfo(srcDoc: PDFDocument, outDoc: PDFDocument): void {
+  const copyString = (read: () => string | undefined, write: (value: string) => void) => {
+    try {
+      const value = read();
+      if (value) write(value);
+    } catch {
+      // A malformed /Info entry must not abort the save.
+    }
+  };
+
+  copyString(() => srcDoc.getTitle(), (v) => outDoc.setTitle(v));
+  copyString(() => srcDoc.getAuthor(), (v) => outDoc.setAuthor(v));
+  copyString(() => srcDoc.getSubject(), (v) => outDoc.setSubject(v));
+  copyString(() => srcDoc.getKeywords(), (v) => outDoc.setKeywords([v]));
+
+  outDoc.setProducer(`${APP_NAME} ${APP_VERSION}`);
+  outDoc.setCreator(srcDoc.getCreator() ?? APP_NAME);
+
+  // Only the creation date is carried over. pdf-lib refreshes the modification
+  // date on every save, which is correct: the file *was* just modified.
+  try {
+    const created = srcDoc.getCreationDate();
+    if (created) outDoc.setCreationDate(created);
+  } catch {
+    // Ignore a missing or unparsable date.
+  }
+}
+
+/**
+ * Rebuild the source document's bookmark tree in the output.
+ *
+ * The tree is walked from the raw outline dictionary rather than through a
+ * higher-level API because destinations must be re-pointed: the source refers to
+ * its own page objects, and after reordering, deletion or a redaction raster
+ * those objects are not the pages in the output any more. `outlineRemap` maps an
+ * output page back to the source page number it was copied from, which is the
+ * only stable identity available across the copy.
+ */
+async function copyOutlines(
+  srcDoc: PDFDocument,
+  outDoc: PDFDocument,
+  outlineRemap: Map<PDFRef, number>,
+): Promise<void> {
+  if (outlineRemap.size === 0) return;
+
+  try {
+    // `lookup` throws when the key is absent, and `get` returns the raw entry,
+    // which for a cross-reference is a PDFRef rather than the dictionary.
+    const raw = srcDoc.catalog.get(PDFName.of('Outlines'));
+    if (raw === undefined) return;
+    const srcRoot = raw instanceof PDFRef ? srcDoc.context.lookup(raw) : raw;
+    if (!(srcRoot instanceof PDFDict)) return;
+
+    // Source page number -> the page in the output that came from it.
+    const outputPageBySource = new Map<number, PDFPage>();
+    for (const [ref, sourceNumber] of outlineRemap) {
+      const page = outDoc.getPages().find((p) => p.ref === ref);
+      if (page) outputPageBySource.set(sourceNumber, page);
+    }
+    if (outputPageBySource.size === 0) return;
+
+    /**
+     * Source page number keyed by the page's dictionary.
+     *
+     * Matching is on the dictionary rather than by searching the page list for
+     * the destination's first element, because that element is a reference, not
+     * a `PDFPage` instance.
+     */
+    const sourceNumberByDict = new Map<PDFDict, number>();
+    srcDoc.getPages().forEach((page, i) => {
+      sourceNumberByDict.set(page.node as unknown as PDFDict, i + 1);
+    });
+
+    /** Destination inside the source document, resolved to an output page. */
+    const resolveDestination = (node: PDFDict): { page: PDFPage; top: number } | null => {
+      const dest = node.get(PDFName.of('Dest'));
+      if (!dest) return null;
+
+      let array: unknown[] | null = null;
+      if (dest instanceof PDFArray) {
+        array = dest.asArray();
+      } else if (dest instanceof PDFDict) {
+        // A named destination: /D holds the real array.
+        const named = dest.get(PDFName.of('D'));
+        if (named instanceof PDFArray) array = named.asArray();
+      }
+      if (!array || array.length === 0) return null;
+
+      const target = array[0];
+      if (target === undefined) return null;
+      // A parsed document keeps indirect entries as references; a destination
+      // built in memory may hold the dictionary directly. Handle both.
+      const targetDict = target instanceof PDFRef ? srcDoc.context.lookup(target) : target;
+      if (!(targetDict instanceof PDFDict)) return null;
+
+      const sourceNumber = sourceNumberByDict.get(targetDict);
+      const page = sourceNumber !== undefined ? outputPageBySource.get(sourceNumber) : undefined;
+      if (!page) return null;
+
+      // The vertical offset is optional; PDFNull means "top of the page".
+      const rawTop = array[1];
+      const top = rawTop instanceof PDFNumber ? rawTop.asNumber() : 0;
+      return { page, top };
+    };
+
+    const textOf = (node: PDFDict): string => {
+      const title = node.get(PDFName.of('Title'));
+      if (title instanceof PDFHexString) {
+        // PDFHexString decodes UTF-16BE, which is how non-Latin titles are stored.
+        try {
+          return title.decodeText();
+        } catch {
+          return title.asString();
+        }
+      }
+      if (title instanceof PDFName) return title.decodeText();
+      if (title instanceof PDFString) return title.decodeText();
+      return '';
+    };
+
+    /** Resolve a key on `node` to a dictionary, or null if it is absent. */
+    const dictAt = (node: PDFDict, key: string): PDFDict | null => {
+      const raw = node.get(PDFName.of(key));
+      if (raw === undefined) return null;
+      const resolved = raw instanceof PDFRef ? srcDoc.context.lookup(raw) : raw;
+      return resolved instanceof PDFDict ? resolved : null;
+    };
+
+    const childrenOf = (node: PDFDict): PDFDict[] => {
+      const children: PDFDict[] = [];
+      let cursor = dictAt(node, 'First');
+      // The sibling list is a linked list; the bound guards against a cycle in
+      // a malformed file rather than trusting the input.
+      while (cursor && children.length < 10_000) {
+        children.push(cursor);
+        cursor = dictAt(cursor, 'Next');
+      }
+      return children;
+    };
+
+    let created = 0;
+
+    // An outline item is a plain dictionary; pdf-lib exposes no builder, and a
+    // bare object carries no reference until the context registers it, so each
+    // item is registered here and the sibling links are wired by hand.
+    const copyLevel = (nodes: PDFDict[], parentRef?: PDFRef): PDFRef[] => {
+      const built: Array<{ dict: PDFDict; ref: PDFRef }> = [];
+      for (const node of nodes) {
+        const title = textOf(node);
+        if (!title) continue;
+
+        const outline = outDoc.context.obj({ Title: PDFHexString.fromText(title) });
+        const outlineRef = outDoc.context.register(outline);
+        created += 1;
+
+        const resolved = resolveDestination(node);
+        if (resolved) {
+          outline.set(
+            PDFName.of('Dest'),
+            outDoc.context.obj([
+              resolved.page.ref,
+              PDFName.of('XYZ'),
+              PDFNull,
+              PDFNumber.of(resolved.top),
+              PDFNull,
+            ]),
+          );
+        }
+
+        if (parentRef) outline.set(PDFName.of('Parent'), parentRef);
+        built.push({ dict: outline, ref: outlineRef });
+
+        const children = childrenOf(node);
+        if (children.length > 0) {
+          const builtChildren = copyLevel(children, outlineRef);
+          if (builtChildren.length > 0) {
+            outline.set(PDFName.of('First'), builtChildren[0]!);
+            outline.set(PDFName.of('Last'), builtChildren[builtChildren.length - 1]!);
+            outline.set(PDFName.of('Count'), PDFNumber.of(builtChildren.length));
+          }
+        }
+      }
+
+      // Siblings are a /Next chain. Without it only the first bookmark of each
+      // level would be reachable, and the rest would silently vanish.
+      for (let i = 0; i < built.length - 1; i += 1) {
+        built[i]!.dict.set(PDFName.of('Next'), built[i + 1]!.ref);
+      }
+
+      return built.map((b) => b.ref);
+    };
+
+    const roots = childrenOf(srcRoot);
+    if (roots.length === 0) return;
+
+    const top = copyLevel(roots);
+    if (top.length > 0 && created > 0) {
+      const root = outDoc.context.obj({ Type: PDFName.of('Outlines') });
+      const rootRef = outDoc.context.register(root);
+      root.set(PDFName.of('First'), top[0]!);
+      root.set(PDFName.of('Last'), top[top.length - 1]!);
+      root.set(PDFName.of('Count'), PDFNumber.of(top.length));
+      outDoc.catalog.set(PDFName.of('Outlines'), rootRef);
+    }
+  } catch (err) {
+    // Losing bookmarks is a real loss, so it is reported, but it must not stop
+    // the document from being written.
+    console.warn('Bookmarks could not be carried over:', err);
+  }
 }
 
 /**
@@ -155,6 +395,10 @@ export async function exportModifiedPdf(
     throw new Error('Belgede kaydedilecek sayfa bulunamadı.');
   }
 
+  // Destination page object in the output document -> its source page number.
+  // Populated while pages are written, consumed when the outline is rebuilt.
+  const outlineRemap = new Map<PDFRef, number>();
+
   for (let i = 0; i < validPageIndices.length; i++) {
     const pageIndex = validPageIndices[i];
     if (pageIndex === undefined) continue;
@@ -171,6 +415,12 @@ export async function exportModifiedPdf(
       const [copiedPage] = await outDoc.copyPages(srcDoc, [pageState.originalPageNumber - 1]);
       outPage = outDoc.addPage(copiedPage);
     }
+
+    // Bookmark destinations refer to pages by *object reference*, so after a
+    // reorder, a deletion or an inserted blank page the original references no
+    // longer point at the right sheet. Capturing the index here and patching the
+    // outline after the loop is what keeps navigation landing correctly.
+    outlineRemap.set(outPage.ref, pageState.originalPageNumber);
 
     // Apply rotation
     if (pageState && pageState.rotation !== undefined) {
@@ -206,6 +456,13 @@ export async function exportModifiedPdf(
 
     if (failed.length > 0) options.onAnnotationFailure?.(failed.map((a) => a.type));
   }
+
+  // Everything below runs before `save`, and all of it is best-effort: failing to
+  // carry a bookmark or a metadata field across must never cost the user their
+  // actual edits.
+
+  copyDocumentInfo(srcDoc, outDoc);
+  await copyOutlines(srcDoc, outDoc, outlineRemap);
 
   const bytes = await outDoc.save();
 
