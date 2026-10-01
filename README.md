@@ -168,8 +168,8 @@ graph TD
 
 Vite 8 ve React 19 mimarisi ile ağır modüller başlangıç paketinden ayrılmıştır (Code Splitting):
 
-- **Ana Yükleme Paketi:** ~105 kB (Gzip: ~27 kB) — Anında açılış.
-- **İhtiyaç Anında Yüklenen Parçalar (On-Demand Lazy Chunks):**
+- **Başlangıçta yüklenen toplam:** ~766 kB (Gzip: ~229 kB). Bunun büyük bölümü React çekirdeği (~182 kB) ve PDF.js motorudur (~427 kB); uygulama kodunun kendisi yalnızca ~118 kB'dir. Uygulama **masaüstünde** çalıştığı için bu paket diskten okunur, ağdan indirilmez.
+- **İhtiyaç anında yüklenen parçalar (On-Demand Lazy Chunks):**
   - `OcrModal` & `Tesseract`: Yalnızca OCR aracı açıldığında yüklenir.
   - `ExportOfficeModal`: Yalnızca ofis dışa aktarım penceresi istendiğinde yüklenir.
   - `SecurityModal` & `AES-256 Engine`: Yalnızca şifreleme istendiğinde yüklenir.
@@ -216,7 +216,8 @@ Vite 8 ve React 19 mimarisi ile ağır modüller başlangıç paketinden ayrılm
 - **Şifreleme Motoru:** `@pdfsmaller/pdf-encrypt` (Web Crypto AES-256 & RC4)
 - **OCR Motoru:** `tesseract.js 7.0` (Türkçe + İngilizce modelleri)
 - **İkon Seti & Tasarım:** Lucide React, Glassmorphism, Saf CSS Değişkenleri
-- **Otomatik Birim Testleri:** Vitest 5 + Happy-DOM (17 adet test süiti)
+- **Otomatik Birim Testleri:** Vitest 5 + Happy-DOM (61 test, 8 dosya)
+- **Tip Güvenliği:** TypeScript `strict` + `noUncheckedIndexedAccess` (sıfır hata)
 - **Statik Kod Analizi:** Oxlint (Sıfır hata, sıfır uyarı)
 
 ---
