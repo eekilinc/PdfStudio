@@ -23,6 +23,7 @@ import {
   ImageIcon
 } from 'lucide-react';
 import type { ToolType } from '../types/pdf';
+import { t, tpl } from '../utils/i18n';
 
 interface StatusBarProps {
   currentPage: number;
@@ -98,24 +99,24 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
   const getToolInfo = () => {
     switch (activeTool) {
-      case 'select': return { label: 'Seç & Taşı (V)', icon: <MousePointer size={11} /> };
-      case 'pan': return { label: 'Kaydır (H)', icon: <Hand size={11} /> };
-      case 'edit-text': return { label: 'Metin Düzenleme', icon: <FileEdit size={11} color="var(--accent-primary)" /> };
-      case 'text': return { label: 'Yeni Metin (T)', icon: <Type size={11} /> };
-      case 'pen': return { label: 'Çizim Kalemi (P)', icon: <PenTool size={11} /> };
-      case 'highlighter': return { label: 'Fosforlu Kalem', icon: <Highlighter size={11} /> };
+      case 'select': return { label: t('status.tool.select'), icon: <MousePointer size={11} /> };
+      case 'pan': return { label: t('status.tool.pan'), icon: <Hand size={11} /> };
+      case 'edit-text': return { label: t('status.tool.edit-text'), icon: <FileEdit size={11} color="var(--accent-primary)" /> };
+      case 'text': return { label: t('status.tool.text'), icon: <Type size={11} /> };
+      case 'pen': return { label: t('status.tool.pen'), icon: <PenTool size={11} /> };
+      case 'highlighter': return { label: t('status.tool.highlighter'), icon: <Highlighter size={11} /> };
       case 'rect':
       case 'circle':
       case 'line':
-      case 'arrow': return { label: 'Geometrik Şekil', icon: <Square size={11} /> };
-      case 'signature': return { label: 'Dijital İmza', icon: <PenSquare size={11} color="var(--accent-primary)" /> };
-      case 'stamp': return { label: 'Damga & Kaşe', icon: <Stamp size={11} color="#e11d48" /> };
-      case 'redact': return { label: 'Kalıcı Karartma', icon: <EyeOff size={11} color="#f43f5e" /> };
-      case 'eraser': return { label: 'Silgi', icon: <Eraser size={11} /> };
-      case 'measure': return { label: 'Mesafe Cetveli', icon: <Ruler size={11} color="#f59e0b" /> };
-      case 'checkbox': return { label: 'Onay Kutusu', icon: <CheckSquare size={11} /> };
-      case 'image': return { label: 'Görsel Ekle', icon: <ImageIcon size={11} color="#38bdf8" /> };
-      default: return { label: 'Hazır', icon: <MousePointer size={11} /> };
+      case 'arrow': return { label: t('status.tool.rect'), icon: <Square size={11} /> };
+      case 'signature': return { label: t('status.tool.signature'), icon: <PenSquare size={11} color="var(--accent-primary)" /> };
+      case 'stamp': return { label: t('status.tool.stamp'), icon: <Stamp size={11} color="#e11d48" /> };
+      case 'redact': return { label: t('status.tool.redact'), icon: <EyeOff size={11} color="#f43f5e" /> };
+      case 'eraser': return { label: t('status.tool.eraser'), icon: <Eraser size={11} /> };
+      case 'measure': return { label: t('status.tool.measure'), icon: <Ruler size={11} color="#f59e0b" /> };
+      case 'checkbox': return { label: t('status.tool.checkbox'), icon: <CheckSquare size={11} /> };
+      case 'image': return { label: t('status.tool.image'), icon: <ImageIcon size={11} color="#38bdf8" /> };
+      default: return { label: t('status.tool.select'), icon: <MousePointer size={11} /> };
     }
   };
 
@@ -144,7 +145,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       {/* 1. LEFT: Page & Document Info */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: 'var(--text-primary)' }}>
-          <span>Sayfa {currentPage} / {totalPages || 1}</span>
+          <span>{tpl('status.page', { page: currentPage, total: totalPages || 1 })}</span>
         </div>
 
         <div style={{ height: '12px', width: '1px', background: 'var(--border-color)' }} />
@@ -177,15 +178,15 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         {isDirty ? (
           <div 
             style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#f59e0b', fontSize: '10.5px', fontWeight: 500 }}
-            data-tooltip="Değişiklikleri kaydetmek için Ctrl+S yapın"
+            data-tooltip={t('action.save')}
           >
             <CircleDot size={10} color="#f59e0b" />
-            <span>Kaydedilmemiş değişiklikler</span>
+            <span>{t('status.unsaved')}</span>
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#10b981', fontSize: '10.5px' }}>
             <Check size={11} color="#10b981" />
-            <span>Tüm değişiklikler kaydedildi</span>
+<span>{t('status.saved')}</span>
           </div>
         )}
       </div>
@@ -204,7 +205,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
               fontFamily: 'JetBrains Mono, monospace',
               fontWeight: 600,
             }}
-            data-tooltip="Hızlı Yakınlaştırma Seçenekleri"
+            data-tooltip={t('status.zoom')}
           >
             {Math.round(zoom * 100)}%
           </button>
@@ -262,7 +263,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         <button
           onClick={() => onZoomChange(Math.max(0.25, zoom - 0.15))}
           className="btn-icon"
-          data-tooltip="Uzaklaştır"
+          data-tooltip={t('action.zoomOut')}
           style={{ width: '20px', height: '20px' }}
         >
           <ZoomOut size={12} />
@@ -271,7 +272,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         <button
           onClick={() => onZoomChange(Math.min(4.0, zoom + 0.15))}
           className="btn-icon"
-          data-tooltip="Yakınlaştır"
+          data-tooltip={t('action.zoomIn')}
           style={{ width: '20px', height: '20px' }}
         >
           <ZoomIn size={12} />
@@ -283,7 +284,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         <button
           onClick={onOpenProperties}
           className="btn-icon"
-          data-tooltip="Belge Özellikleri & Meta Veri (Ctrl+D)"
+          data-tooltip={t('header.properties')}
           style={{ width: '20px', height: '20px' }}
         >
           <Info size={12} />
@@ -293,7 +294,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         <button
           onClick={onToggleFullscreen}
           className={`btn-icon ${isFullscreen ? 'active' : ''}`}
-          data-tooltip={isFullscreen ? 'Tam Ekrandan Çık (Esc / F11)' : 'Sunum & Tam Ekran Modu (F11)'}
+          data-tooltip={isFullscreen ? t('action.closeFullscreen') : t('action.fullscreen')}
           style={{ width: '20px', height: '20px' }}
         >
           {isFullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}

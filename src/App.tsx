@@ -7,13 +7,24 @@ import type {
   StampAnnotation,
   TextAnnotation,
   SearchMatch,
-  ReaderFilter
+  ReaderFilter,
+  PdfComment,
+  PdfCommentStatus,
+  PdfLink,
+  PdfBookmark,
+  PageBoxSettings,
+  PageLabelRange,
+  PageTransition,
+  AccessibilityState,
+  FormFieldValue,
+  SanitizeOptions,
 } from './types/pdf';
 import { getSharedPdfDoc, releasePdfDoc } from './utils/pdfInit';
 import { createSamplePdf } from './utils/samplePdf';
 import { exportModifiedPdf, createBlankPdf } from './utils/pdfExport';
+import { readDocumentFeatures, readAttachmentBytes } from './utils/pdfInspect';
 import { hasRedactions, type RedactionQuality } from './utils/redaction';
-import { writeBinaryFile } from './utils/ipc';
+import { writeBinaryFile, readRecoveryCopy, writeRecoveryCopy, clearRecoveryCopy, type RecoveryCopy } from './utils/ipc';
 import { nextAnnotationId } from './utils/ids';
 import { usePdfHistory } from './hooks/usePdfHistory';
 import { useDocumentTabs } from './hooks/useDocumentTabs';
@@ -48,9 +59,39 @@ const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => 
 const DocPropertiesModal = lazy(() => import('./components/DocPropertiesModal').then(m => ({ default: m.DocPropertiesModal })));
 const CommandPalette = lazy(() => import('./components/CommandPalette').then(m => ({ default: m.CommandPalette })));
 const StatusBar = lazy(() => import('./components/StatusBar').then(m => ({ default: m.StatusBar })));
+const CommentModal = lazy(() => import('./components/CommentModal').then(m => ({ default: m.CommentModal })));
+const LinkModal = lazy(() => import('./components/LinkModal').then(m => ({ default: m.LinkModal })));
+const PageSetupModal = lazy(() =>
+  import('./components/PageSetupModal').then(m => ({ default: m.PageSetupModal })),
+);
+const AccessibilityModal = lazy(() =>
+  import('./components/AccessibilityModal').then(m => ({ default: m.AccessibilityModal })),
+);
+const PdfaModal = lazy(() => import('./components/PdfaModal').then(m => ({ default: m.PdfaModal })));
+const PadesModal = lazy(() => import('./components/PadesModal').then(m => ({ default: m.PadesModal })));
+const DocumentInspectorModal = lazy(() =>
+  import('./components/DocumentInspectorModal').then(m => ({ default: m.DocumentInspectorModal })),
+);
+
+/**
+ * A shared empty comment list.
+ *
+ * A fresh array on every render would give the viewer a new prop identity
+ * and re-run the overlay drawing for every page on every state change.
+ */
+const EMPTY_COMMENTS: readonly PdfComment[] = [];
+
+/**
+ * A shared empty link list.
+ *
+ * A fresh array on every render would give the viewer a new prop identity
+ * and re-run the overlay drawing for every page on every state change.
+ */
+const EMPTY_LINKS: readonly PdfLink[] = [];
 
 import { loadSettings, saveSettings } from './types/settings';
 import type { AppSettings } from './types/settings';
+import { setLocale, resolveLocale, type Locale } from './utils/i18n';
 
 export function App() {
   // User Settings state
@@ -61,6 +102,16 @@ export function App() {
     const s = loadSettings();
     return s.theme || 'dark';
   });
+  // Interface language: set the i18n locale from saved settings
+  const [locale, setLocaleState] = useState<Locale>(() => {
+    const s = loadSettings();
+    return resolveLocale(s.language);
+  });
+
+  // Sync i18n locale whenever saved settings change
+  useEffect(() => {
+    setLocale(locale);
+  }, [locale]);
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     const s = loadSettings();
     return s.sidebarDefaultOpen !== undefined ? s.sidebarDefaultOpen : true;
@@ -188,6 +239,36 @@ export function App() {
   const [isDocPropertiesOpen, setIsDocPropertiesOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // The left sidebar shows the pages, the outline, the comments or the form
+  // of the document. The tab lives here because the toolbar and the panels
+  // have to be able to open it.
+  const [sidebarTab, setSidebarTab] = useState<'thumbnails' | 'outline' | 'comments' | 'forms' | 'links' | 'layers'>('thumbnails');
+
+  // A comment that waits for its text: the page and the point it is
+  // anchored at.
+  const [pendingCommentAnchor, setPendingCommentAnchor] = useState<{
+    pageIndex: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
+  const [isInspectorModalOpen, setIsInspectorModalOpen] = useState(false);
+
+  // A link that waits for its target: the page and the area it covers.
+  const [pendingLinkArea, setPendingLinkArea] = useState<{
+    pageIndex: number;
+    rect: { x: number; y: number; width: number; height: number };
+  } | null>(null);
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [isPageSetupModalOpen, setIsPageSetupModalOpen] = useState(false);
+  const [isAccessibilityModalOpen, setIsAccessibilityModalOpen] = useState(false);
+  const [isPdfaModalOpen, setIsPdfaModalOpen] = useState(false);
+  const [isPadesModalOpen, setIsPadesModalOpen] = useState(false);
+
+  // A recovery copy of the document, offered back when the application was
+  // closed without warning.
+  const [recoveryCopy, setRecoveryCopy] = useState<RecoveryCopy | null>(null);
 
   const handleFitPage = () => setZoom(0.85);
   const handleFitWidth = () => setZoom(1.25);
@@ -322,6 +403,38 @@ export function App() {
       setActiveMatchIndex(-1);
       setCurrentFilePath(resolvedFilePath);
       addTab(filename, resolvedFilePath, initialDoc);
+
+      // The comments and the form of the document are read out of the file,
+      // so the panels show what the document really holds. The read is done
+      // after the document is on screen: it parses the file a second time,
+      // which is too slow to hold up the first paint.
+      //
+      // The result is applied silently: what the file holds is not an edit,
+      // so it must not become an undo step the user could walk back into.
+      readDocumentFeatures(arrayBuffer)
+        .then(({ comments, fields, links, bookmarks, pageLabels, pageTransitions, pageBoxes, layers, attachments }) => {
+          updateDocSilently((prev) => {
+            // The document may have been closed or another tab opened while
+            // the file was being read; the result then belongs to a document
+            // that is no longer on screen.
+            if (prev.data !== arrayBuffer) return prev;
+            return {
+              ...prev,
+              comments,
+              formFields: fields,
+              links,
+              bookmarks,
+              pageLabels,
+              pageTransitions,
+              pageBoxes,
+              layers,
+              attachments,
+            };
+          });
+        })
+        .catch(() => {
+          // A document that cannot be parsed twice simply has no panels.
+        });
     } catch (err) {
       console.error('PDF parsing error:', err);
       showToast('PDF dosyası açılırken bir hata oluştu.', 'error');
@@ -658,6 +771,9 @@ export function App() {
         });
         await writeBinaryFile(currentFilePath, exportedBytes);
         markSaved();
+        // The document is on disk now, so the recovery copy is not needed
+        // any more.
+        await clearRecoveryCopy();
         showToast(`✓ Kaydedildi: ${docState.filename}`, 'success');
         return;
       } catch (err) {
@@ -703,6 +819,7 @@ export function App() {
           setCurrentFilePath(chosenPath);
           updateDocSilently((prev) => ({ ...prev, filename: newFilename }));
           markSaved();
+          await clearRecoveryCopy();
           showToast(`✓ Farklı kaydedildi: ${newFilename}`, 'success');
           return;
         } else {
@@ -721,12 +838,93 @@ export function App() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         markSaved();
+        await clearRecoveryCopy();
         showToast('✓ PDF İndirildi', 'success');
       }
     } catch (err) {
       console.error('Save As error:', err);
       showToast('PDF kaydedilirken bir hata oluştu: ' + (err as Error).message, 'error');
     }
+  };
+
+  /**
+   * Keep a recovery copy of the document while it has unsaved changes.
+   *
+   * The copy is the document as it would be written to disk, so the work is
+   * not lost when the application is closed without warning. It is written
+   * once a minute and removed again as soon as the document is saved.
+   *
+   * The document is read from a ref rather than from the state, because the
+   * effect must not be restarted by every edit: an effect that restarted on
+   * every change would never reach its minute when the user is busy.
+   */
+  const docStateRef = useRef(docState);
+  const isDirtyRef = useRef(isDirty);
+
+  useEffect(() => {
+    docStateRef.current = docState;
+    isDirtyRef.current = isDirty;
+  });
+
+  useEffect(() => {
+    if (!settings.autoSave) return;
+    const minutes = Math.max(1, settings.autoSaveIntervalMinutes || 1);
+
+    const timer = window.setInterval(() => {
+      const state = docStateRef.current;
+      // Only a document that has unsaved changes is worth a copy, and the
+      // copy is written without the questions the save asks.
+      if (!state.data || !isDirtyRef.current) return;
+
+      exportModifiedPdf(state)
+        .then((bytes) => writeRecoveryCopy(bytes, state.filename || 'Belge.pdf'))
+        .catch(() => {
+          // A failed recovery copy must never interrupt the editing.
+        });
+    }, minutes * 60 * 1000);
+
+    return () => window.clearInterval(timer);
+  }, [settings.autoSave, settings.autoSaveIntervalMinutes]);
+
+  /**
+   * Look for a recovery copy when the application starts.
+   *
+   * A copy that is still there means the application was closed without
+   * the document being saved, so it is offered back to the user.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    readRecoveryCopy()
+      .then((copy) => {
+        if (!cancelled && copy && copy.contents.length > 0) setRecoveryCopy(copy);
+      })
+      .catch(() => {
+        // Without a desktop shell there is no recovery copy.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Open the recovery copy as a new document. */
+  const handleRestoreRecovery = async () => {
+    const copy = recoveryCopy;
+    setRecoveryCopy(null);
+    if (!copy) return;
+
+    const buffer = copy.contents.buffer.slice(
+      copy.contents.byteOffset,
+      copy.contents.byteOffset + copy.contents.byteLength,
+    ) as ArrayBuffer;
+    const name = copy.filename || 'Kurtarilan_Belge.pdf';
+    await parseAndSetPdf(buffer, name, copy.contents.byteLength, null);
+    showToast('Kurtarma kopyası açıldı. Kaydetmeyi unutmayın.', 'info');
+  };
+
+  /** Throw the recovery copy away. */
+  const handleDiscardRecovery = async () => {
+    setRecoveryCopy(null);
+    await clearRecoveryCopy();
   };
 
   // Print PDF Handler
@@ -760,6 +958,349 @@ export function App() {
         if (url) URL.revokeObjectURL(url);
       }, 1000);
     }
+  };
+
+  /* ------------------------------------------------------------------ *
+   * Review comments
+   *
+   * A comment is a real annotation in the file, so it is written into the
+   * PDF when the document is saved and every other reader sees it.
+   * ------------------------------------------------------------------ */
+
+  /** The date written into a new comment. */
+  const newCommentDate = () => {
+    const now = new Date();
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `D:${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}Z`;
+  };
+
+  /** The author written into a new comment. */
+  const commentAuthor = () => settings.commentAuthor || 'PDF Studio Kullanıcısı';
+
+  /** Put the viewer into the note tool and open the comments panel. */
+  const handleStartCommentTool = () => {
+    setSidebarTab('comments');
+    setActiveConfig((prev) => ({ ...prev, tool: 'comment' }));
+    showToast('Sayfaya tıklayarak yorumunuzu ekleyin.', 'info');
+  };
+
+  /** A click on the page with the note tool: ask for the text. */
+  const handleCommentAt = (pageIndex: number, point: { x: number; y: number }) => {
+    setPendingCommentAnchor({ pageIndex, x: point.x, y: point.y });
+    setIsCommentModalOpen(true);
+  };
+
+  /** Write the comment the user typed into the document. */
+  const handleSubmitComment = (contents: string) => {
+    const anchor = pendingCommentAnchor;
+    setIsCommentModalOpen(false);
+    setPendingCommentAnchor(null);
+    if (!anchor) return;
+
+    const comment: PdfComment = {
+      id: nextAnnotationId('cmt'),
+      pageIndex: anchor.pageIndex,
+      kind: 'note',
+      // The note hangs below and to the right of the point that was
+      // clicked, the way a reader draws it.
+      rect: { x: anchor.x, y: anchor.y, width: 20, height: 20 },
+      contents,
+      author: commentAuthor(),
+      modified: newCommentDate(),
+      color: '#f59e0b',
+    };
+
+    updateDocWithHistory((prev) => ({
+      ...prev,
+      comments: [...(prev.comments ?? []), comment],
+    }));
+    setActiveConfig((prev) => ({ ...prev, tool: 'select' }));
+    showToast('Yorum eklendi.', 'success');
+  };
+
+  /** Answer a comment. */
+  const handleAddReply = (contents: string, parentId?: string) => {
+    if (!parentId) return;
+    const parent = (docState.comments ?? []).find((c) => c.id === parentId);
+    if (!parent) return;
+
+    const reply: PdfComment = {
+      id: nextAnnotationId('cmt'),
+      pageIndex: parent.pageIndex,
+      kind: 'note',
+      rect: parent.rect,
+      contents,
+      author: commentAuthor(),
+      modified: newCommentDate(),
+      parentId,
+      color: parent.color,
+    };
+
+    updateDocWithHistory((prev) => ({
+      ...prev,
+      comments: [...(prev.comments ?? []), reply],
+    }));
+    showToast('Yanıt eklendi.', 'success');
+  };
+
+  /** Resolve a comment, or take the resolution back. */
+  const handleSetCommentStatus = (id: string, status?: PdfCommentStatus) => {
+    updateDocWithHistory((prev) => ({
+      ...prev,
+      comments: (prev.comments ?? []).map((c) => (c.id === id ? { ...c, status } : c)),
+    }));
+  };
+
+  /** Remove a comment together with its replies. */
+  const handleDeleteComment = (id: string) => {
+    updateDocWithHistory((prev) => {
+      const comments = prev.comments ?? [];
+      const doomed = new Set<string>([id]);
+      // A reply belongs to its comment, so it goes with it.
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const comment of comments) {
+          if (comment.parentId && doomed.has(comment.parentId) && !doomed.has(comment.id)) {
+            doomed.add(comment.id);
+            grew = true;
+          }
+        }
+      }
+      return { ...prev, comments: comments.filter((c) => !doomed.has(c.id)) };
+    });
+    showToast('Yorum silindi.', 'info');
+  };
+
+  /* ------------------------------------------------------------------ *
+   * Hyperlinks
+   * ------------------------------------------------------------------ */
+
+  /** Put the viewer into the link tool and open the links panel. */
+  const handleStartLinkTool = () => {
+    setSidebarTab('links');
+    setActiveConfig((prev) => ({ ...prev, tool: 'link' }));
+    showToast('Sayfada köprü olacak alanı seçin.', 'info');
+  };
+
+  /** An area was selected on the page: ask where the link points. */
+  const handleLinkAt = (
+    pageIndex: number,
+    rect: { x: number; y: number; width: number; height: number },
+  ) => {
+    setPendingLinkArea({ pageIndex, rect });
+    setIsLinkModalOpen(true);
+  };
+
+  /** Write the link the user chose into the document. */
+  const handleSubmitLink = (
+    target: { kind: 'external'; url: string } | { kind: 'internal'; targetPageIndex: number },
+  ) => {
+    const area = pendingLinkArea;
+    setIsLinkModalOpen(false);
+    setPendingLinkArea(null);
+    if (!area) return;
+
+    const link: PdfLink = {
+      id: nextAnnotationId('lnk'),
+      pageIndex: area.pageIndex,
+      kind: target.kind,
+      rect: area.rect,
+      url: target.kind === 'external' ? target.url : undefined,
+      targetPageIndex: target.kind === 'internal' ? target.targetPageIndex : undefined,
+    };
+
+    updateDocWithHistory((prev) => ({
+      ...prev,
+      links: [...(prev.links ?? []), link],
+    }));
+    setActiveConfig((prev) => ({ ...prev, tool: 'select' }));
+    showToast('Köprü eklendi.', 'success');
+  };
+
+  /** Remove a link from the document. */
+  const handleDeleteLink = (id: string) => {
+    updateDocWithHistory((prev) => ({
+      ...prev,
+      links: (prev.links ?? []).filter((l) => l.id !== id),
+    }));
+    showToast('Köprü kaldırıldı.', 'info');
+  };
+
+  /* ------------------------------------------------------------------ *
+   * Bookmarks
+   * ------------------------------------------------------------------ */
+
+  /** Add a bookmark, optionally under another one. */
+  const handleAddBookmark = (parentId?: string) => {
+    const pageIndex = currentPageIndex;
+
+    const addUnder = (items: PdfBookmark[]): PdfBookmark[] =>
+      items.map((item) => {
+        if (item.id === parentId) {
+          const child: PdfBookmark = {
+            id: nextAnnotationId('bmk'),
+            title: `Yer İmi ${items.length + 1}`,
+            pageIndex,
+          };
+          return { ...item, children: [...(item.children ?? []), child] };
+        }
+        if (item.children && item.children.length > 0) {
+          return { ...item, children: addUnder(item.children) };
+        }
+        return item;
+      });
+
+    updateDocWithHistory((prev) => {
+      const bookmarks = prev.bookmarks ?? [];
+      if (!parentId) {
+        return {
+          ...prev,
+          bookmarks: [
+            ...bookmarks,
+            { id: nextAnnotationId('bmk'), title: `Yer İmi ${bookmarks.length + 1}`, pageIndex },
+          ],
+        };
+      }
+      return { ...prev, bookmarks: addUnder(bookmarks) };
+    });
+
+    setSidebarTab('outline');
+    showToast('Yer imi eklendi.', 'success');
+  };
+
+  /** Rename a bookmark. */
+  const handleRenameBookmark = (id: string, title: string) => {
+    const rename = (items: PdfBookmark[]): PdfBookmark[] =>
+      items.map((item) => {
+        if (item.id === id) return { ...item, title };
+        if (item.children && item.children.length > 0) {
+          return { ...item, children: rename(item.children) };
+        }
+        return item;
+      });
+
+    updateDocWithHistory((prev) => ({ ...prev, bookmarks: rename(prev.bookmarks ?? []) }));
+  };
+
+  /** Remove a bookmark together with the ones nested under it. */
+  const handleDeleteBookmark = (id: string) => {
+    const remove = (items: PdfBookmark[]): PdfBookmark[] =>
+      items
+        .filter((item) => item.id !== id)
+        .map((item) =>
+          item.children && item.children.length > 0
+            ? { ...item, children: remove(item.children) }
+            : item,
+        );
+
+    updateDocWithHistory((prev) => ({ ...prev, bookmarks: remove(prev.bookmarks ?? []) }));
+    showToast('Yer imi silindi.', 'info');
+  };
+
+  /* ------------------------------------------------------------------ *
+   * Page setup
+   * ------------------------------------------------------------------ */
+
+  /** Remember the page labels, transitions and boxes of the document. */
+  const handleApplyPageSetup = (setup: {
+    pageLabels: PageLabelRange[];
+    pageTransitions: PageTransition[];
+    pageBoxes: PageBoxSettings[];
+  }) => {
+    updateDocWithHistory((prev) => ({
+      ...prev,
+      pageLabels: setup.pageLabels,
+      pageTransitions: setup.pageTransitions,
+      pageBoxes: setup.pageBoxes,
+    }));
+  };
+
+  /* ------------------------------------------------------------------ *
+   * Layers and embedded files
+   * ------------------------------------------------------------------ */
+
+  /** Turn a layer of the document on or off. */
+  const handleToggleLayer = (name: string, visible: boolean) => {
+    updateDocWithHistory((prev) => ({
+      ...prev,
+      layerVisibility: { ...(prev.layerVisibility ?? {}), [name]: visible },
+    }));
+  };
+
+  /**
+   * Write an embedded file of the document out.
+   *
+   * The file is written next to the document when it has a place on disk,
+   * and offered to the user as a download otherwise.
+   */
+  const handleExtractAttachment = async (name: string) => {
+    if (!docState.data) return;
+    try {
+      const bytes = await readAttachmentBytes(docState.data, name);
+      if (!bytes) {
+        showToast('Ek okunamadı.', 'error');
+        return;
+      }
+
+      if (currentFilePath) {
+        const folder = currentFilePath.replace(/[\\/][^\\/]*$/, '');
+        const target = `${folder}\\${name}`;
+        await writeBinaryFile(target, bytes);
+        showToast(`✓ Kaydedildi: ${target}`, 'success');
+        return;
+      }
+
+      // Without a place on disk the file is offered as a download.
+      const blob = new Blob([bytes as BlobPart], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`✓ ${name} indirildi`, 'success');
+    } catch (err) {
+      console.error('Attachment extract error:', err);
+      showToast('Ek kaydedilemedi: ' + (err as Error).message, 'error');
+    }
+  };
+
+  /* ------------------------------------------------------------------ *
+   * Accessibility
+   * ------------------------------------------------------------------ */
+
+  /** Remember what the accessibility checker fixed. */
+  const handleApplyAccessibility = (accessibility: AccessibilityState) => {
+    updateDocWithHistory((prev) => ({ ...prev, accessibility }));
+  };
+
+  /** Remember the archival standard the document declares itself to be. */
+  const handleApplyPdfa = (target: { part: string; conformance: string }) => {
+    updateDocWithHistory((prev) => ({ ...prev, pdfa: target }));
+  };
+
+  /* ------------------------------------------------------------------ *
+   * Interactive form
+   * ------------------------------------------------------------------ */
+
+  /** Fill a field of the form. */
+  const handleFormValueChange = (name: string, value: FormFieldValue) => {
+    updateDocWithHistory((prev) => ({
+      ...prev,
+      formValues: { ...(prev.formValues ?? {}), [name]: value },
+    }));
+  };
+
+  /* ------------------------------------------------------------------ *
+   * Document inspector
+   * ------------------------------------------------------------------ */
+
+  /** Remember what the document inspector is asked to remove. */
+  const handleApplySanitize = (options: SanitizeOptions) => {
+    updateDocWithHistory((prev) => ({ ...prev, sanitize: options }));
   };
 
   // Page Operations
@@ -1197,6 +1738,14 @@ export function App() {
         if (e.key.toLowerCase() === 'p') setActiveConfig((prev) => ({ ...prev, tool: 'pen' }));
         if (e.key.toLowerCase() === 't') setActiveConfig((prev) => ({ ...prev, tool: 'text' }));
         if (e.key.toLowerCase() === 'e') setActiveConfig((prev) => ({ ...prev, tool: 'edit-text' }));
+        if (e.key.toLowerCase() === 'y') {
+          setActiveConfig((prev) => ({ ...prev, tool: 'comment' }));
+          setSidebarTab('comments');
+        }
+        if (e.key.toLowerCase() === 'k') {
+          setActiveConfig((prev) => ({ ...prev, tool: 'link' }));
+          setSidebarTab('links');
+        }
       }
     };
 
@@ -1344,6 +1893,11 @@ export function App() {
           onFitWidth={handleFitWidth}
           onFitPage={handleFitPage}
           theme={theme}
+          language={settings.language}
+          onLanguageChange={(lang) => {
+            setSettings((prev) => ({ ...prev, language: lang }));
+            setLocaleState(lang);
+          }}
           onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           onOpenOrganizeModal={() => setIsOrganizeModalOpen(true)}
           onOpenMergeModal={() => setIsMergeModalOpen(true)}
@@ -1364,6 +1918,11 @@ export function App() {
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           onOpenProperties={() => setIsDocPropertiesOpen(true)}
+          onOpenInspectorModal={() => setIsInspectorModalOpen(true)}
+          onOpenPageSetupModal={() => setIsPageSetupModalOpen(true)}
+          onOpenAccessibilityModal={() => setIsAccessibilityModalOpen(true)}
+          onOpenPdfaModal={() => setIsPdfaModalOpen(true)}
+          onOpenPadesModal={() => setIsPadesModalOpen(true)}
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
           isFullscreen={isFullscreen}
           onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
@@ -1391,6 +1950,9 @@ export function App() {
           onLoadSample={loadSampleDocument}
           onOpenMergeModal={() => setIsMergeModalOpen(true)}
           onOpenSplitModal={() => setIsSplitModalOpen(true)}
+          recovery={recoveryCopy ? { filename: recoveryCopy.filename, savedAt: recoveryCopy.savedAt } : null}
+          onRestoreRecovery={handleRestoreRecovery}
+          onDiscardRecovery={handleDiscardRecovery}
         />
       ) : (
         <>
@@ -1460,6 +2022,27 @@ export function App() {
                 onDeletePage={handleDeletePage}
                 onMovePage={handleMovePage}
                 onAddBlankPage={handleAddBlankPage}
+                activeTab={sidebarTab}
+                onTabChange={setSidebarTab}
+                comments={docState.comments ?? []}
+                onJumpToPage={setCurrentPageIndex}
+                onAddComment={handleAddReply}
+                onSetCommentStatus={handleSetCommentStatus}
+                onDeleteComment={handleDeleteComment}
+                onStartCommentTool={handleStartCommentTool}
+                formFields={docState.formFields ?? []}
+                formValues={docState.formValues ?? {}}
+                onFormValueChange={handleFormValueChange}
+                links={docState.links ?? []}
+                totalPages={activePages.length}
+                onDeleteLink={handleDeleteLink}
+                onStartLinkTool={handleStartLinkTool}
+                bookmarks={docState.bookmarks ?? []}
+                onAddBookmark={handleAddBookmark}
+                onRenameBookmark={handleRenameBookmark}
+                onDeleteBookmark={handleDeleteBookmark}
+                layers={docState.layers ?? []}
+                onToggleLayer={handleToggleLayer}
               />
             )}
 
@@ -1494,6 +2077,10 @@ export function App() {
               searchMatches={searchMatches}
               activeMatchIndex={activeMatchIndex}
               onZoomChange={setZoom}
+              comments={docState.comments ?? EMPTY_COMMENTS}
+              onAddComment={handleCommentAt}
+              links={docState.links ?? EMPTY_LINKS}
+              onAddLink={handleLinkAt}
             />
 
             {/* Floating Presentation Pill in Fullscreen Mode */}
@@ -1745,6 +2332,82 @@ export function App() {
               markDirty();
             }}
             onShowToast={showToast}
+            onExtractAttachment={handleExtractAttachment}
+          />
+        )}
+
+        {isCommentModalOpen && (
+          <CommentModal
+            isOpen={isCommentModalOpen}
+            onClose={() => {
+              setIsCommentModalOpen(false);
+              setPendingCommentAnchor(null);
+            }}
+            onSubmit={handleSubmitComment}
+            pageNumber={pendingCommentAnchor ? pendingCommentAnchor.pageIndex + 1 : undefined}
+            author={commentAuthor()}
+          />
+        )}
+
+        {isLinkModalOpen && (
+          <LinkModal
+            isOpen={isLinkModalOpen}
+            onClose={() => {
+              setIsLinkModalOpen(false);
+              setPendingLinkArea(null);
+            }}
+            onSubmit={handleSubmitLink}
+            totalPages={activePages.length}
+            pageNumber={pendingLinkArea ? pendingLinkArea.pageIndex + 1 : undefined}
+          />
+        )}
+
+        {isPageSetupModalOpen && (
+          <PageSetupModal
+            isOpen={isPageSetupModalOpen}
+            onClose={() => setIsPageSetupModalOpen(false)}
+            docState={docState}
+            onApply={handleApplyPageSetup}
+            onShowToast={showToast}
+          />
+        )}
+
+        {isAccessibilityModalOpen && (
+          <AccessibilityModal
+            isOpen={isAccessibilityModalOpen}
+            onClose={() => setIsAccessibilityModalOpen(false)}
+            docState={docState}
+            onApply={handleApplyAccessibility}
+            onShowToast={showToast}
+          />
+        )}
+
+        {isPdfaModalOpen && (
+          <PdfaModal
+            isOpen={isPdfaModalOpen}
+            onClose={() => setIsPdfaModalOpen(false)}
+            docState={docState}
+            onApply={handleApplyPdfa}
+            onShowToast={showToast}
+          />
+        )}
+
+        {isPadesModalOpen && (
+          <PadesModal
+            isOpen={isPadesModalOpen}
+            onClose={() => setIsPadesModalOpen(false)}
+            docState={docState}
+            onShowToast={showToast}
+          />
+        )}
+
+        {isInspectorModalOpen && (
+          <DocumentInspectorModal
+            isOpen={isInspectorModalOpen}
+            onClose={() => setIsInspectorModalOpen(false)}
+            docState={docState}
+            onApply={handleApplySanitize}
+            onShowToast={showToast}
           />
         )}
 
@@ -1778,6 +2441,42 @@ export function App() {
             onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
             onOpenOrganizeModal={() => setIsOrganizeModalOpen(true)}
             onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+            onOpenInspectorModal={() => {
+              if (docState.data) setIsInspectorModalOpen(true);
+              else showToast('Önce bir PDF belgesi açmalısınız.', 'info');
+            }}
+            onOpenPageSetupModal={() => {
+              if (docState.data) setIsPageSetupModalOpen(true);
+              else showToast('Önce bir PDF belgesi açmalısınız.', 'info');
+            }}
+            onOpenAccessibilityModal={() => {
+              if (docState.data) setIsAccessibilityModalOpen(true);
+              else showToast('Önce bir PDF belgesi açmalısınız.', 'info');
+            }}
+            onOpenPdfaModal={() => {
+              if (docState.data) setIsPdfaModalOpen(true);
+              else showToast('Önce bir PDF belgesi açmalısınız.', 'info');
+            }}
+            onOpenPadesModal={() => {
+              if (docState.data) setIsPadesModalOpen(true);
+              else showToast('Önce bir PDF belgesi açmalısınız.', 'info');
+            }}
+            onOpenCommentsPanel={() => {
+              if (!sidebarOpen) setSidebarOpen(true);
+              setSidebarTab('comments');
+            }}
+            onOpenFormsPanel={() => {
+              if (!sidebarOpen) setSidebarOpen(true);
+              setSidebarTab('forms');
+            }}
+            onOpenLinksPanel={() => {
+              if (!sidebarOpen) setSidebarOpen(true);
+              setSidebarTab('links');
+            }}
+            onOpenBookmarksPanel={() => {
+              if (!sidebarOpen) setSidebarOpen(true);
+              setSidebarTab('outline');
+            }}
             onAddBlankPage={handleAddBlankPage}
             onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
             onFitPage={handleFitPage}

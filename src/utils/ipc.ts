@@ -51,3 +51,62 @@ export async function readBinaryFile(path: string): Promise<FileBytes | null> {
 export async function writeTextFile(path: string, contents: string): Promise<void> {
   await invoke('write_text_file', { path, contents });
 }
+
+/* ------------------------------------------------------------------ *
+ * Recovery copy
+ *
+ * The application keeps a copy of the open document while it has unsaved
+ * changes, so the work is not lost when the application is closed without
+ * warning. The copy lives in the application's own data folder, never in
+ * the document's folder.
+ * ------------------------------------------------------------------ */
+
+/** The recovery copy of the open document. */
+export interface RecoveryCopy {
+  /** The document as it would be written to disk. */
+  contents: Uint8Array;
+  /** The name of the document the copy was taken from. */
+  filename: string;
+  /** When the copy was taken, in milliseconds since the epoch. */
+  savedAt: number;
+}
+
+/**
+ * Write the recovery copy of the open document.
+ *
+ * Nothing is thrown when there is no desktop shell to write to: the copy is
+ * a convenience, not a requirement.
+ */
+export async function writeRecoveryCopy(contents: Uint8Array, filename: string): Promise<void> {
+  try {
+    await invoke('write_recovery', { contents: Array.from(contents), filename });
+  } catch {
+    // Without the desktop shell there is nowhere to keep the copy.
+  }
+}
+
+/**
+ * Read the recovery copy, if there is one.
+ */
+export async function readRecoveryCopy(): Promise<RecoveryCopy | null> {
+  try {
+    const result = await invoke<{ contents: number[] | ArrayBuffer; filename: string; savedAt: number }>(
+      'read_recovery',
+    );
+    if (!result) return null;
+    const contents =
+      result.contents instanceof ArrayBuffer ? new Uint8Array(result.contents) : Uint8Array.from(result.contents);
+    return { contents, filename: result.filename, savedAt: result.savedAt };
+  } catch {
+    return null;
+  }
+}
+
+/** Remove the recovery copy, after the document was saved. */
+export async function clearRecoveryCopy(): Promise<void> {
+  try {
+    await invoke('clear_recovery');
+  } catch {
+    // Nothing to clear.
+  }
+}

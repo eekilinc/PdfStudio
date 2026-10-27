@@ -18,9 +18,12 @@ import {
   ScanText,
   Image as ImageIcon,
   Ruler,
-  CheckSquare
+  CheckSquare,
+  MessageSquare,
+  Link2
 } from 'lucide-react';
 import type { ToolType, ActiveToolConfig } from '../types/pdf';
+import { t } from '../utils/i18n';
 
 interface ToolbarProps {
   activeConfig: ActiveToolConfig;
@@ -79,7 +82,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={() => onSelectTool('select')}
         className={`btn-icon ${activeConfig.tool === 'select' ? 'active' : ''}`}
-        data-tooltip="Seç & Taşı & Kopyala (V)"
+        data-tooltip={t('tool.select')}
         style={{ width: '30px', height: '30px' }}
       >
         <MousePointer size={15} />
@@ -88,7 +91,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={() => onSelectTool('pan')}
         className={`btn-icon ${activeConfig.tool === 'pan' ? 'active' : ''}`}
-        data-tooltip="Sayfayı Kaydır / Gezin (H)"
+        data-tooltip={t('tool.pan')}
         style={{ width: '30px', height: '30px' }}
       >
         <Hand size={15} />
@@ -100,7 +103,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={() => onSelectTool('edit-text')}
         className={`btn-ghost ${activeConfig.tool === 'edit-text' ? 'active' : ''}`}
-        data-tooltip="PDF Metnini Doğrudan Değiştir / Düzenle"
+        data-tooltip={t('tool.edit-text')}
         style={{
           fontSize: '11px',
           padding: '4px 8px',
@@ -118,7 +121,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={onOpenOcrModal}
         className="btn-ghost"
-        data-tooltip="OCR Taranmış Belgeyi Oku & Düzenlenebilir Yap"
+        data-tooltip={t('tool.ocr')}
         style={{ fontSize: '11px', padding: '4px 8px', fontWeight: 600 }}
       >
         <ScanText size={14} color="#10b981" />
@@ -131,7 +134,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={() => onSelectTool('pen')}
         className={`btn-icon ${activeConfig.tool === 'pen' ? 'active' : ''}`}
-        data-tooltip="Çizim Kalemi (P)"
+        data-tooltip={t('tool.pen')}
         style={{ width: '30px', height: '30px' }}
       >
         <PenTool size={15} />
@@ -140,7 +143,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={() => onSelectTool('highlighter')}
         className={`btn-icon ${activeConfig.tool === 'highlighter' ? 'active' : ''}`}
-        data-tooltip="Fosforlu Vurgulayıcı"
+        data-tooltip={t('tool.highlighter')}
         style={{ width: '30px', height: '30px' }}
       >
         <Highlighter size={15} />
@@ -150,7 +153,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={() => onSelectTool('text')}
         className={`btn-icon ${activeConfig.tool === 'text' ? 'active' : ''}`}
-        data-tooltip="Yeni Metin Ekle (T)"
+        data-tooltip={t('tool.text')}
         style={{ width: '30px', height: '30px' }}
       >
         <Type size={15} />
@@ -160,10 +163,30 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={() => onSelectTool('checkbox')}
         className={`btn-icon ${activeConfig.tool === 'checkbox' ? 'active' : ''}`}
-        data-tooltip="Onay Kutusu Ekle (☑)"
+        data-tooltip={t('tool.checkbox')}
         style={{ width: '30px', height: '30px' }}
       >
         <CheckSquare size={15} />
+      </button>
+
+      {/* Review Comment Tool */}
+      <button
+        onClick={() => onSelectTool('comment')}
+        className={`btn-icon ${activeConfig.tool === 'comment' ? 'active' : ''}`}
+        data-tooltip={t('tool.comment')}
+        style={{ width: '30px', height: '30px' }}
+      >
+        <MessageSquare size={15} color={activeConfig.tool === 'comment' ? '#ffffff' : '#f59e0b'} />
+      </button>
+
+      {/* Hyperlink Tool */}
+      <button
+        onClick={() => onSelectTool('link')}
+        className={`btn-icon ${activeConfig.tool === 'link' ? 'active' : ''}`}
+        data-tooltip={t('tool.link')}
+        style={{ width: '30px', height: '30px' }}
+      >
+        <Link2 size={15} color={activeConfig.tool === 'link' ? '#ffffff' : '#38bdf8'} />
       </button>
 
       {/* Image Insert Button */}
@@ -177,7 +200,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={() => imageInputRef.current?.click()}
         className="btn-icon"
-        data-tooltip="Resim / Görsel / Logo Ekle"
+        data-tooltip={t('tool.image')}
         style={{ width: '30px', height: '30px' }}
       >
         <ImageIcon size={15} color="#38bdf8" />
@@ -187,7 +210,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={() => onSelectTool('measure')}
         className={`btn-icon ${activeConfig.tool === 'measure' ? 'active' : ''}`}
-        data-tooltip="Cetvel / Mesafe Ölçüm Aracı"
+        data-tooltip={t('tool.measure')}
         style={{ width: '30px', height: '30px' }}
       >
         <Ruler size={15} color="#f59e0b" />
@@ -204,7 +227,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             }
           }}
           className={`btn-icon ${isShapeActive ? 'active' : ''}`}
-          data-tooltip="Şekiller (Kare, Daire, Ok)"
+          data-tooltip={t('tool.shapes')}
           style={{ width: 'auto', padding: '0 6px', gap: '3px', height: '30px' }}
         >
           {getShapeIcon()}
@@ -268,7 +291,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={onOpenSignatureModal}
         className={`btn-ghost ${activeConfig.tool === 'signature' ? 'active' : ''}`}
-        data-tooltip="Dijital İmza Ekle"
+        data-tooltip={t('tool.signature')}
         style={{ fontSize: '11px', padding: '4px 8px', fontWeight: 600 }}
       >
         <PenSquare size={14} color="var(--accent-primary)" />
@@ -278,11 +301,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={onOpenStampModal}
         className={`btn-ghost ${activeConfig.tool === 'stamp' ? 'active' : ''}`}
-        data-tooltip="Kaşe & Damga Ekle"
+        data-tooltip={t('tool.stamp')}
         style={{ fontSize: '11px', padding: '4px 8px', fontWeight: 600 }}
       >
         <Stamp size={14} color="#e11d48" />
-        <span>Damga</span>
+        <span>{t('tool.stamp')}</span>
       </button>
 
       <div style={{ height: '18px', width: '1px', background: 'var(--border-color)', margin: '0 2px' }} />
@@ -291,7 +314,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={() => onSelectTool('redact')}
         className={`btn-icon ${activeConfig.tool === 'redact' ? 'active' : ''}`}
-        data-tooltip="Kalıcı Karartma — kaydedince altındaki metin yok edilir (sayfa görüntüye dönüşür)"
+        data-tooltip={t('tool.redact')}
         style={{ width: '30px', height: '30px' }}
       >
         <EyeOff size={15} color={activeConfig.tool === 'redact' ? '#ffffff' : '#f43f5e'} />
@@ -301,7 +324,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button
         onClick={() => onSelectTool('eraser')}
         className={`btn-icon ${activeConfig.tool === 'eraser' ? 'active' : ''}`}
-        data-tooltip="Silgi (Açıklamaları Sil)"
+        data-tooltip={t('tool.eraser')}
         style={{ width: '30px', height: '30px' }}
       >
         <Eraser size={15} />

@@ -8,10 +8,32 @@ import {
   Plus,
   BookOpen,
   Layers,
-  Bookmark
+  Bookmark,
+  MessageSquare,
+  FileText,
+  Link as LinkIcon,
+  Layers as LayersIcon
 } from 'lucide-react';
-import type { PDFDocumentState, PageState, PdfOutlineItem } from '../types/pdf';
+import type {
+  FormFieldValue,
+  PDFDocumentState,
+  PageState,
+  PdfBookmark,
+  PdfComment,
+  PdfCommentStatus,
+  PdfLayer,
+  PdfLink,
+  PdfOutlineItem,
+} from '../types/pdf';
 import { getSharedPdfDoc } from '../utils/pdfInit';
+import { BookmarksPanel } from './BookmarksPanel';
+import { CommentsPanel } from './CommentsPanel';
+import { FormsPanel } from './FormsPanel';
+import { LayersPanel } from './LayersPanel';
+import { LinksPanel } from './LinksPanel';
+
+/** The panels the sidebar can show. */
+export type SidebarTab = 'thumbnails' | 'outline' | 'comments' | 'forms' | 'links' | 'layers';
 
 interface ThumbnailSidebarProps {
   docState: PDFDocumentState;
@@ -22,6 +44,33 @@ interface ThumbnailSidebarProps {
   onDeletePage: (pageIndex: number) => void;
   onMovePage: (fromIndex: number, toIndex: number) => void;
   onAddBlankPage: () => void;
+  /** The panel the sidebar shows. */
+  activeTab: SidebarTab;
+  onTabChange: (tab: SidebarTab) => void;
+  /** The review comments of the document. */
+  comments: PdfComment[];
+  onJumpToPage: (pageIndex: number) => void;
+  onAddComment: (contents: string, parentId?: string) => void;
+  onSetCommentStatus: (id: string, status?: PdfCommentStatus) => void;
+  onDeleteComment: (id: string) => void;
+  onStartCommentTool: () => void;
+  /** The fields of the interactive form. */
+  formFields: NonNullable<PDFDocumentState['formFields']>;
+  formValues: Record<string, FormFieldValue>;
+  onFormValueChange: (name: string, value: FormFieldValue) => void;
+  /** The hyperlinks of the document. */
+  links: PdfLink[];
+  totalPages: number;
+  onDeleteLink: (id: string) => void;
+  onStartLinkTool: () => void;
+  /** The bookmarks of the document. */
+  bookmarks: PdfBookmark[];
+  onAddBookmark: (parentId?: string) => void;
+  onRenameBookmark: (id: string, title: string) => void;
+  onDeleteBookmark: (id: string) => void;
+  /** The layers of the document. */
+  layers: PdfLayer[];
+  onToggleLayer: (name: string, visible: boolean) => void;
 }
 
 export const ThumbnailSidebar: React.FC<ThumbnailSidebarProps> = ({
@@ -33,8 +82,28 @@ export const ThumbnailSidebar: React.FC<ThumbnailSidebarProps> = ({
   onDeletePage,
   onMovePage,
   onAddBlankPage,
+  activeTab,
+  onTabChange,
+  comments,
+  onJumpToPage,
+  onAddComment,
+  onSetCommentStatus,
+  onDeleteComment,
+  onStartCommentTool,
+  formFields,
+  formValues,
+  onFormValueChange,
+  links,
+  totalPages,
+  onDeleteLink,
+  onStartLinkTool,
+  bookmarks,
+  onAddBookmark,
+  onRenameBookmark,
+  onDeleteBookmark,
+  layers,
+  onToggleLayer,
 }) => {
-  const [activeTab, setActiveTab] = useState<'thumbnails' | 'outline'>('thumbnails');
   const [outlineItems, setOutlineItems] = useState<PdfOutlineItem[]>([]);
 
   const activePages = docState.pageOrder
@@ -116,37 +185,118 @@ export const ThumbnailSidebar: React.FC<ThumbnailSidebarProps> = ({
         background: 'var(--bg-secondary)',
       }}>
         <button
-          onClick={() => setActiveTab('thumbnails')}
+          onClick={() => onTabChange('thumbnails')}
           className={`btn-ghost ${activeTab === 'thumbnails' ? 'active' : ''}`}
           style={{
             flex: 1,
             borderRadius: 0,
-            padding: '10px 8px',
+            padding: '10px 4px',
             fontSize: '11px',
             fontWeight: 600,
             justifyContent: 'center',
             borderBottom: activeTab === 'thumbnails' ? '2px solid var(--accent-primary)' : 'none',
           }}
+          data-tooltip="Sayfalar"
         >
           <Layers size={14} />
-          <span>Sayfalar ({activePages.length})</span>
+          <span>{activePages.length}</span>
         </button>
 
         <button
-          onClick={() => setActiveTab('outline')}
+          onClick={() => onTabChange('outline')}
           className={`btn-ghost ${activeTab === 'outline' ? 'active' : ''}`}
           style={{
             flex: 1,
             borderRadius: 0,
-            padding: '10px 8px',
+            padding: '10px 4px',
             fontSize: '11px',
             fontWeight: 600,
             justifyContent: 'center',
             borderBottom: activeTab === 'outline' ? '2px solid var(--accent-primary)' : 'none',
           }}
+          data-tooltip="İçindekiler"
         >
           <BookOpen size={14} />
-          <span>İçindekiler</span>
+        </button>
+
+        <button
+          onClick={() => onTabChange('comments')}
+          className={`btn-ghost ${activeTab === 'comments' ? 'active' : ''}`}
+          style={{
+            flex: 1,
+            borderRadius: 0,
+            padding: '10px 4px',
+            fontSize: '11px',
+            fontWeight: 600,
+            justifyContent: 'center',
+            borderBottom: activeTab === 'comments' ? '2px solid var(--accent-primary)' : 'none',
+          }}
+          data-tooltip="Yorumlar"
+        >
+          <MessageSquare size={14} />
+          {comments.length > 0 && (
+            <span style={{ fontSize: '10px', color: 'var(--accent-primary)' }}>{comments.length}</span>
+          )}
+        </button>
+
+        <button
+          onClick={() => onTabChange('forms')}
+          className={`btn-ghost ${activeTab === 'forms' ? 'active' : ''}`}
+          style={{
+            flex: 1,
+            borderRadius: 0,
+            padding: '10px 4px',
+            fontSize: '11px',
+            fontWeight: 600,
+            justifyContent: 'center',
+            borderBottom: activeTab === 'forms' ? '2px solid var(--accent-primary)' : 'none',
+          }}
+          data-tooltip="Form Alanları"
+        >
+          <FileText size={14} />
+          {formFields.length > 0 && (
+            <span style={{ fontSize: '10px', color: 'var(--accent-primary)' }}>{formFields.length}</span>
+          )}
+        </button>
+
+        <button
+          onClick={() => onTabChange('links')}
+          className={`btn-ghost ${activeTab === 'links' ? 'active' : ''}`}
+          style={{
+            flex: 1,
+            borderRadius: 0,
+            padding: '10px 4px',
+            fontSize: '11px',
+            fontWeight: 600,
+            justifyContent: 'center',
+            borderBottom: activeTab === 'links' ? '2px solid var(--accent-primary)' : 'none',
+          }}
+          data-tooltip="Köprüler"
+        >
+          <LinkIcon size={14} />
+          {links.length > 0 && (
+            <span style={{ fontSize: '10px', color: 'var(--accent-primary)' }}>{links.length}</span>
+          )}
+        </button>
+
+        <button
+          onClick={() => onTabChange('layers')}
+          className={`btn-ghost ${activeTab === 'layers' ? 'active' : ''}`}
+          style={{
+            flex: 1,
+            borderRadius: 0,
+            padding: '10px 4px',
+            fontSize: '11px',
+            fontWeight: 600,
+            justifyContent: 'center',
+            borderBottom: activeTab === 'layers' ? '2px solid var(--accent-primary)' : 'none',
+          }}
+          data-tooltip="Katmanlar"
+        >
+          <LayersIcon size={14} />
+          {layers.length > 0 && (
+            <span style={{ fontSize: '10px', color: 'var(--accent-primary)' }}>{layers.length}</span>
+          )}
         </button>
       </div>
 
@@ -306,54 +456,118 @@ export const ThumbnailSidebar: React.FC<ThumbnailSidebarProps> = ({
 
       {/* Tab 2: Table of Contents / Outline */}
       {activeTab === 'outline' && (
-        <div style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '12px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '6px',
-        }}>
-          {outlineItems.length > 0 ? (
-            outlineItems.map((item, idx) => (
-              <div
-                key={idx}
-                onClick={() => {
-                  const targetPage = activePages.find(p => p.displayPageNumber === item.pageNumber) || activePages[item.pageIndex] || activePages[0];
-                  if (targetPage) onSelectPage(targetPage.pageIndex);
-                }}
-                className="btn-ghost"
-                style={{
-                  padding: '8px 10px',
-                  justifyContent: 'space-between',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '12px',
-                  lineHeight: '1.4',
-                  textAlign: 'left',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
-                  <Bookmark size={13} color="var(--accent-primary)" style={{ flexShrink: 0 }} />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {item.title}
-                  </span>
-                </div>
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
-                  s. {item.pageNumber}
-                </span>
-              </div>
-            ))
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {bookmarks.length > 0 || docState.bookmarks !== undefined ? (
+            <BookmarksPanel
+              bookmarks={bookmarks}
+              currentPageIndex={currentPageIndex}
+              onJumpToPage={onJumpToPage}
+              onAddBookmark={onAddBookmark}
+              onRenameBookmark={onRenameBookmark}
+              onDeleteBookmark={onDeleteBookmark}
+            />
           ) : (
             <div style={{
-              padding: '24px 12px',
-              textAlign: 'center',
-              color: 'var(--text-muted)',
-              fontSize: '12px',
-              lineHeight: '1.5',
+              flex: 1,
+              overflowY: 'auto',
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
             }}>
-              Bu belgede gömülü içindekiler tablosu (yer imi) bulunamadı.
+              {outlineItems.length > 0 ? (
+                outlineItems.map((item, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      const targetPage = activePages.find(p => p.displayPageNumber === item.pageNumber) || activePages[item.pageIndex] || activePages[0];
+                      if (targetPage) onSelectPage(targetPage.pageIndex);
+                    }}
+                    className="btn-ghost"
+                    style={{
+                      padding: '8px 10px',
+                      justifyContent: 'space-between',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '12px',
+                      lineHeight: '1.4',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                      <Bookmark size={13} color="var(--accent-primary)" style={{ flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.title}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
+                      s. {item.pageNumber}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div style={{
+                  padding: '24px 12px',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)',
+                  fontSize: '12px',
+                  lineHeight: '1.5',
+                }}>
+                  Bu belgede gömülü içindekiler tablosu (yer imi) bulunamadı.
+                </div>
+              )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Tab 3: Review comments */}
+      {activeTab === 'comments' && (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <CommentsPanel
+            comments={comments}
+            currentPageIndex={currentPageIndex}
+            onJumpToPage={onJumpToPage}
+            onAddComment={onAddComment}
+            onSetStatus={onSetCommentStatus}
+            onDeleteComment={onDeleteComment}
+            onStartCommentTool={onStartCommentTool}
+          />
+        </div>
+      )}
+
+      {/* Tab 4: Interactive form */}
+      {activeTab === 'forms' && (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <FormsPanel
+            fields={formFields}
+            values={formValues}
+            onChange={onFormValueChange}
+            onJumpToPage={onJumpToPage}
+          />
+        </div>
+      )}
+
+      {/* Tab 5: Hyperlinks */}
+      {activeTab === 'links' && (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <LinksPanel
+            links={links}
+            totalPages={totalPages}
+            onJumpToPage={onJumpToPage}
+            onDeleteLink={onDeleteLink}
+            onStartLinkTool={onStartLinkTool}
+          />
+        </div>
+      )}
+
+      {/* Tab 6: Layers */}
+      {activeTab === 'layers' && (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <LayersPanel
+            layers={layers}
+            currentPageIndex={currentPageIndex}
+            onToggleLayer={onToggleLayer}
+          />
         </div>
       )}
     </aside>

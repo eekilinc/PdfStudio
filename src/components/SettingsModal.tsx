@@ -11,10 +11,12 @@ import {
   Check, 
   Trash2, 
   Languages,
-  ShieldCheck
+  ShieldCheck,
+  Globe,
 } from 'lucide-react';
 import { DEFAULT_SETTINGS } from '../types/settings';
 import type { AppSettings } from '../types/settings';
+import { t, tpl } from '../utils/i18n';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -190,7 +192,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }}
           >
             <Sun size={14} />
-            <span>Görünüm & Tema</span>
+            <span>{t('settings.tab.appearance')}</span>
           </button>
 
           <button
@@ -213,7 +215,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }}
           >
             <PenTool size={14} />
-            <span>Araçlar & Çizim</span>
+            <span>{t('settings.tab.tools')}</span>
           </button>
 
           <button
@@ -236,7 +238,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }}
           >
             <FolderOpen size={14} />
-            <span>Dosya & Kaydetme</span>
+            <span>{t('settings.tab.files')}</span>
           </button>
 
           <button
@@ -259,7 +261,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }}
           >
             <Languages size={14} />
-            <span>OCR & Gizlilik</span>
+            <span>{t('settings.tab.ocr')}</span>
           </button>
         </div>
 
@@ -293,8 +295,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   >
                     <Moon size={18} color="#38bdf8" />
                     <div style={{ textAlign: 'left' }}>
-                      <div>Koyu Tema (Dark Mode)</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400 }}>Göz yormayan koyu gri tonlar</div>
+                      <div>{t('settings.theme.dark.label')}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400 }}>{t('settings.theme.dark.desc')}</div>
                     </div>
                   </button>
 
@@ -315,8 +317,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   >
                     <Sun size={18} color="#f59e0b" />
                     <div style={{ textAlign: 'left' }}>
-                      <div>Açık Tema (Light Mode)</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400 }}>Ferah, aydınlık beyaz tonlar</div>
+                      <div>{t('settings.theme.light.label')}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400 }}>{t('settings.theme.light.desc')}</div>
                     </div>
                   </button>
                 </div>
@@ -390,8 +392,60 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       checked={current.sidebarDefaultOpen}
                       onChange={(e) => handleChange('sidebarDefaultOpen', e.target.checked)}
                     />
-                    <span>Belge açıldığında sol paneli açık tut</span>
+                    <span>{t('settings.sidebar-default')}</span>
                   </label>
+                </div>
+              </div>
+
+              {/* Interface Language */}
+              <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px', display: 'block' }}>
+                  Arayüz Dili
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <button
+                    onClick={() => handleChange('language', 'en')}
+                    style={{
+                      padding: '12px',
+                      borderRadius: 'var(--radius-md)',
+                      border: current.language === 'en' ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                      background: current.language === 'en' ? 'rgba(56, 189, 248, 0.12)' : 'var(--bg-tertiary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      cursor: 'pointer',
+                      color: 'var(--text-primary)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <Globe size={16} color="#38bdf8" />
+                    <div style={{ textAlign: 'left' }}>
+                      <div>English</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400 }}>Restart for full effect</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleChange('language', 'tr')}
+                    style={{
+                      padding: '12px',
+                      borderRadius: 'var(--radius-md)',
+                      border: current.language === 'tr' ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                      background: current.language === 'tr' ? 'rgba(56, 189, 248, 0.12)' : 'var(--bg-tertiary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      cursor: 'pointer',
+                      color: 'var(--text-primary)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <Globe size={16} color="#f59e0b" />
+                    <div style={{ textAlign: 'left' }}>
+                      <div>Türkçe</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400 }}>Tam etki için yeniden başlatın</div>
+                    </div>
+                  </button>
                 </div>
               </div>
 
@@ -406,12 +460,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <PenTool size={15} color="#ef4444" />
-                  <span>Çizim Kalemi Varsayılanları</span>
+                  <span>{t('settings.pen.defaults')}</span>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                   <div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>Kalem Rengi:</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>{t('settings.pen.color')}</div>
                     <div style={{ display: 'flex', gap: '6px' }}>
                       {penColors.map((color) => (
                         <div
@@ -433,7 +487,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                      Çizgi Kalınlığı: <strong>{current.defaultPenWidth} px</strong>
+                      {tpl('settings.pen.width', { value: current.defaultPenWidth })}
                     </div>
                     <input
                       type="range"
@@ -451,12 +505,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Sparkles size={15} color="#f59e0b" />
-                  <span>Fosforlu Vurgulayıcı Varsayılanları</span>
+                  <span>{t('settings.highlighter.defaults')}</span>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                   <div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>Vurgu Rengi:</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>{t('settings.highlighter.color')}</div>
                     <div style={{ display: 'flex', gap: '6px' }}>
                       {highlighterColors.map((color) => (
                         <div
@@ -478,7 +532,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                      Vurgu Şeffaflığı: <strong>%{Math.round(current.defaultHighlighterOpacity * 100)}</strong>
+                      {tpl('settings.highlighter.opacity', { value: Math.round(current.defaultHighlighterOpacity * 100) })}
                     </div>
                     <input
                       type="range"
@@ -530,6 +584,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={(e) => handleChange('defaultFontSize', Number(e.target.value))}
                     style={{ width: '100%', marginTop: '6px' }}
                   />
+                </div>
+              </div>
+
+              {/* Comment author */}
+              <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Yorum Yazarı
+                </label>
+                <input
+                  value={current.commentAuthor}
+                  onChange={(e) => handleChange('commentAuthor', e.target.value)}
+                  placeholder={t('settings.commentAuthor.placeholder')}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-color)',
+                    background: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    fontSize: '12.5px',
+                  }}
+                />
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Yorumlar PDF'in içine açıklama olarak yazılır; bu ad, belgeyi açan diğer
+                  kişilerin yanında görünür.
                 </div>
               </div>
 
@@ -619,7 +698,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     checked={current.showWelcomeScreenOnStartup}
                     onChange={(e) => handleChange('showWelcomeScreenOnStartup', e.target.checked)}
                   />
-                  <span>Uygulama açılışında Karşılama Merkezini (Welcome Dashboard) göster</span>
+                  <span>{t('settings.welcome.show')}</span>
                 </label>
 
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', color: 'var(--text-primary)' }}>
@@ -628,7 +707,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     checked={current.rememberRecentFiles}
                     onChange={(e) => handleChange('rememberRecentFiles', e.target.checked)}
                   />
-                  <span>Son açılan belgeleri hatırla ve listele</span>
+                  <span>{t('settings.recent.remember')}</span>
                 </label>
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px solid var(--border-color)' }}>
@@ -643,15 +722,59 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {clearedRecentSuccess ? (
                       <>
                         <Check size={13} color="#10b981" />
-                        <span style={{ color: '#10b981' }}>Temizlendi!</span>
+                        <span style={{ color: '#10b981' }}>{t('settings.recent.cleared')}</span>
                       </>
                     ) : (
                       <>
                         <Trash2 size={13} />
-                        <span>Geçmişi Temizle</span>
+                        <span>{t('settings.recent.clear')}</span>
                       </>
                     )}
                   </button>
+                </div>
+              </div>
+
+              {/* Recovery copy */}
+              <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Kurtarma Kopyası (Otomatik Kayıt)
+                </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', color: 'var(--text-primary)' }}>
+                  <input
+                    type="checkbox"
+                    checked={current.autoSave}
+                    onChange={(e) => handleChange('autoSave', e.target.checked)}
+                  />
+                  <span>{t('settings.recovery.keep')}</span>
+                </label>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: 'var(--text-primary)' }}>
+                  <span>{t('settings.recovery.interval')}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={current.autoSaveIntervalMinutes}
+                    onChange={(e) => handleChange('autoSaveIntervalMinutes', Math.max(1, Number(e.target.value) || 1))}
+                    disabled={!current.autoSave}
+                    style={{
+                      width: '68px',
+                      fontSize: '12.5px',
+                      padding: '4px 8px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border-color)',
+                      background: 'var(--bg-primary)',
+                      color: 'var(--text-primary)',
+                    }}
+                  />
+                  <span>{t('settings.recovery.minutes')}</span>
+                </div>
+
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Uygulama beklenmedik şekilde kapansa bile çalışmanız kaybolmaz: kopyaya
+                  karşılık gelen belge bir sonraki açılışta geri önerilir. Kopyanın bulunduğu yer
+                  uygulamanın veri klasörüdür, belgenin kendi klasörü değil.
                 </div>
               </div>
 
@@ -665,7 +788,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Languages size={16} color="var(--accent-primary)" />
-                  <span>Varsayılan OCR Optik Karakter Tanıma Dili</span>
+                  <span>{t('settings.ocr.default')}</span>
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                   Taranmış resim belgelerinden metin çıkarırken öncelikli olarak kullanılacak dil motoru:
@@ -703,12 +826,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <ShieldCheck size={16} color="var(--accent-primary)" />
-                  <span>Gizlilik: Metin Çevirisi Onayı</span>
+                  <span>{t('settings.privacy.translation')}</span>
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  "Türkçe'ye Çevir" aracı, seçtiğiniz metni (en fazla 400 karakter) üçüncü
-                  taraf bir çeviri servisine gönderir. Uygulamanın geri kalanı hiçbir
-                  özellikte ağ bağlantısı kurmaz.
+                  {t('settings.privacy.translation.desc')}
                 </div>
 
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px', color: 'var(--text-primary)' }}>
@@ -717,7 +838,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     checked={current.confirmTextTranslation}
                     onChange={(e) => handleChange('confirmTextTranslation', e.target.checked)}
                   />
-                  <span>Her çeviriden önce onay iste</span>
+                  <span>{t('settings.privacy.confirm')}</span>
                 </label>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                   Kapatırsanız onay penceresi hiç sorulmaz ve seçtiğiniz metin doğrudan
@@ -747,7 +868,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             style={{ fontSize: '11.5px', gap: '5px', color: 'var(--text-muted)' }}
           >
             <RotateCcw size={13} />
-            <span>Varsayılanlara Sıfırla</span>
+            <span>{t('settings.reset')}</span>
           </button>
 
           <button

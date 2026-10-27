@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, FileText, Calendar, HardDrive, ShieldCheck, Tag, User, Save, Layers } from 'lucide-react';
+import { X, FileText, Calendar, HardDrive, ShieldCheck, Tag, User, Save, Layers, Paperclip, Download } from 'lucide-react';
 import { PDFDocument } from 'pdf-lib';
-import type { PDFDocumentState } from '../types/pdf';
+import type { PDFDocumentState, PdfAttachment } from '../types/pdf';
 import { getSharedPdfDoc } from '../utils/pdfInit';
 
 interface DocPropertiesModalProps {
@@ -10,6 +10,8 @@ interface DocPropertiesModalProps {
   docState: PDFDocumentState;
   onUpdatePdfData: (newData: Uint8Array) => void;
   onShowToast?: (text: string, type?: 'success' | 'error' | 'info') => void;
+  /** Write an embedded file of the document out. */
+  onExtractAttachment?: (name: string) => void;
 }
 
 export const DocPropertiesModal: React.FC<DocPropertiesModalProps> = ({
@@ -18,6 +20,7 @@ export const DocPropertiesModal: React.FC<DocPropertiesModalProps> = ({
   docState,
   onUpdatePdfData,
   onShowToast,
+  onExtractAttachment,
 }) => {
   const [activeTab, setActiveTab] = useState<'info' | 'edit'>('info');
   const [loading, setLoading] = useState(true);
@@ -35,6 +38,9 @@ export const DocPropertiesModal: React.FC<DocPropertiesModalProps> = ({
   const [author, setAuthor] = useState('');
   const [subject, setSubject] = useState('');
   const [keywords, setKeywords] = useState('');
+
+  // The files that are attached to the document.
+  const attachments: PdfAttachment[] = docState.attachments ?? [];
 
   useEffect(() => {
     if (!isOpen || !docState.data) return;
@@ -281,6 +287,63 @@ export const DocPropertiesModal: React.FC<DocPropertiesModalProps> = ({
                 <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-primary)', wordBreak: 'break-all' }}>
                   {producer} {creator && creator !== '-' ? `(${creator})` : ''}
                 </div>
+              </div>
+
+              {/* The files that are attached to the document */}
+              <div className="glass-panel" style={{ padding: '12px', borderRadius: 'var(--radius-md)', gridColumn: 'span 2' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '11px', marginBottom: '6px' }}>
+                  <Paperclip size={13} />
+                  <span>Gömülü Dosyalar ({attachments.length})</span>
+                </div>
+                {attachments.length === 0 ? (
+                  <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                    Belgeye eklenmiş dosya yok.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {attachments.map((attachment) => (
+                      <div
+                        key={attachment.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '6px 8px',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'var(--bg-tertiary)',
+                          border: '1px solid var(--border-color)',
+                        }}
+                      >
+                        <Paperclip size={12} color="var(--accent-primary)" style={{ flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                            title={attachment.name}
+                          >
+                            {attachment.name}
+                          </div>
+                          <div style={{ fontSize: '10.5px', color: 'var(--text-tertiary)' }}>
+                            {formatFileSize(attachment.size)} · {attachment.mimeType}
+                          </div>
+                        </div>
+                        <button
+                          className="btn-ghost"
+                          style={{ fontSize: '11px', padding: '3px 8px' }}
+                          onClick={() => onExtractAttachment?.(attachment.name)}
+                          title="Dosyayı kaydet"
+                        >
+                          <Download size={12} /> Kaydet
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : (

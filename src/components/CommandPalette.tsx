@@ -34,9 +34,17 @@ import {
   Moon, 
   Eye, 
   Settings as SettingsIcon,
-  Plus
+  Plus,
+  MessageSquare,
+  ScanSearch,
+  Link2,
+  Accessibility,
+  FileBadge,
+  Bookmark as BookmarkIcon,
+  FileText as FileTextIcon
 } from 'lucide-react';
 import type { ToolType, ReaderFilter } from '../types/pdf';
+import { t } from '../utils/i18n';
 
 interface CommandItem {
   id: string;
@@ -71,6 +79,15 @@ interface CommandPaletteProps {
   onOpenSecurityModal: () => void;
   onOpenOrganizeModal: () => void;
   onOpenSettingsModal: () => void;
+  onOpenInspectorModal: () => void;
+  onOpenPageSetupModal: () => void;
+  onOpenAccessibilityModal: () => void;
+  onOpenPdfaModal: () => void;
+  onOpenPadesModal: () => void;
+  onOpenCommentsPanel: () => void;
+  onOpenFormsPanel: () => void;
+  onOpenLinksPanel: () => void;
+  onOpenBookmarksPanel: () => void;
   onAddBlankPage: () => void;
   onToggleFullscreen: () => void;
   onFitPage: () => void;
@@ -103,6 +120,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onOpenSecurityModal,
   onOpenOrganizeModal,
   onOpenSettingsModal,
+  onOpenInspectorModal,
+  onOpenPageSetupModal,
+  onOpenAccessibilityModal,
+  onOpenPdfaModal,
+  onOpenPadesModal,
+  onOpenCommentsPanel,
+  onOpenFormsPanel,
+  onOpenLinksPanel,
+  onOpenBookmarksPanel,
   onAddBlankPage,
   onToggleFullscreen,
   onFitPage,
@@ -118,52 +144,61 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
   const commands: CommandItem[] = [
     // Dosya İşlemleri
-    { id: 'open', title: 'PDF Belgesi Aç', category: 'Dosya', icon: <FolderOpen size={15} />, shortcut: 'Ctrl+O', action: onOpenNativePdf },
-    { id: 'save', title: 'Belgeyi Kaydet', category: 'Dosya', icon: <Save size={15} />, shortcut: 'Ctrl+S', action: onSavePdf },
-    { id: 'save-as', title: 'Farklı Kaydet...', category: 'Dosya', icon: <Download size={15} />, shortcut: 'Ctrl+Shift+S', action: onSaveAsPdf },
-    { id: 'print', title: 'Yazdır', category: 'Dosya', icon: <Printer size={15} />, shortcut: 'Ctrl+P', action: onPrint },
-    { id: 'properties', title: 'Belge Özellikleri & Meta Veriler', category: 'Dosya', icon: <Info size={15} />, shortcut: 'Ctrl+D', action: onOpenProperties },
+    { id: 'open', title: t('cmd.file.open'), category: t('cmd.category.file'), icon: <FolderOpen size={15} />, shortcut: 'Ctrl+O', action: onOpenNativePdf },
+    { id: 'save', title: t('cmd.file.save'), category: t('cmd.category.file'), icon: <Save size={15} />, shortcut: 'Ctrl+S', action: onSavePdf },
+    { id: 'save-as', title: t('cmd.file.saveAs'), category: t('cmd.category.file'), icon: <Download size={15} />, shortcut: 'Ctrl+Shift+S', action: onSaveAsPdf },
+    { id: 'print', title: t('cmd.file.print'), category: t('cmd.category.file'), icon: <Printer size={15} />, shortcut: 'Ctrl+P', action: onPrint },
+    { id: 'properties', title: t('cmd.file.properties'), category: t('cmd.category.file'), icon: <Info size={15} />, shortcut: 'Ctrl+D', action: onOpenProperties },
 
     // Düzenleme & Çizim Araçları
-    { id: 'tool-select', title: 'Seç & Taşı & Kopyala', category: 'Araçlar', icon: <MousePointer size={15} />, shortcut: 'V', action: () => onSelectTool('select') },
-    { id: 'tool-edit-text', title: 'PDF Metnini Doğrudan Düzenle', category: 'Araçlar', icon: <FileEdit size={15} color="var(--accent-primary)" />, shortcut: 'E', action: () => onSelectTool('edit-text') },
-    { id: 'tool-text', title: 'Yeni Metin Ekle', category: 'Araçlar', icon: <Type size={15} />, shortcut: 'T', action: () => onSelectTool('text') },
-    { id: 'tool-pen', title: 'Serbest Çizim Kalemi', category: 'Araçlar', icon: <PenTool size={15} />, shortcut: 'P', action: () => onSelectTool('pen') },
-    { id: 'tool-highlighter', title: 'Fosforlu Vurgulayıcı Kalem', category: 'Araçlar', icon: <Highlighter size={15} />, action: () => onSelectTool('highlighter') },
-    { id: 'tool-signature', title: 'Dijital El Yazısı İmza Ekle', category: 'Araçlar', icon: <PenSquare size={15} color="var(--accent-primary)" />, action: onOpenSignatureModal },
-    { id: 'tool-stamp', title: 'Kurumsal Kaşe & Onay Damgası Ekle', category: 'Araçlar', icon: <Stamp size={15} color="#e11d48" />, action: onOpenStampModal },
-    { id: 'tool-redact', title: 'Hassas Verileri Karart & Gizle (Redaction)', category: 'Araçlar', icon: <EyeOff size={15} color="#f43f5e" />, action: () => onSelectTool('redact') },
-    { id: 'tool-eraser', title: 'Silgi (Açıklamaları Sil)', category: 'Araçlar', icon: <Eraser size={15} />, action: () => onSelectTool('eraser') },
-    { id: 'tool-measure', title: 'Cetvel / Mesafe Ölçüm Aracı', category: 'Araçlar', icon: <Ruler size={15} color="#f59e0b" />, action: () => onSelectTool('measure') },
-    { id: 'tool-checkbox', title: 'İnteraktif Onay Kutusu Ekle', category: 'Araçlar', icon: <CheckSquare size={15} />, action: () => onSelectTool('checkbox') },
+    { id: 'tool-select', title: t('cmd.tool.select'), category: t('cmd.category.tools'), icon: <MousePointer size={15} />, shortcut: 'V', action: () => onSelectTool('select') },
+    { id: 'tool-edit-text', title: t('cmd.tool.editText'), category: t('cmd.category.tools'), icon: <FileEdit size={15} color="var(--accent-primary)" />, shortcut: 'E', action: () => onSelectTool('edit-text') },
+    { id: 'tool-text', title: t('cmd.tool.text'), category: t('cmd.category.tools'), icon: <Type size={15} />, shortcut: 'T', action: () => onSelectTool('text') },
+    { id: 'tool-pen', title: t('cmd.tool.pen'), category: t('cmd.category.tools'), icon: <PenTool size={15} />, shortcut: 'P', action: () => onSelectTool('pen') },
+    { id: 'tool-highlighter', title: t('cmd.tool.highlighter'), category: t('cmd.category.tools'), icon: <Highlighter size={15} />, action: () => onSelectTool('highlighter') },
+    { id: 'tool-signature', title: t('cmd.tool.signature'), category: t('cmd.category.tools'), icon: <PenSquare size={15} color="var(--accent-primary)" />, action: onOpenSignatureModal },
+    { id: 'tool-stamp', title: t('cmd.tool.stamp'), category: t('cmd.category.tools'), icon: <Stamp size={15} color="#e11d48" />, action: onOpenStampModal },
+    { id: 'tool-redact', title: t('cmd.tool.redact'), category: t('cmd.category.tools'), icon: <EyeOff size={15} color="#f43f5e" />, action: () => onSelectTool('redact') },
+    { id: 'tool-eraser', title: t('cmd.tool.eraser'), category: t('cmd.category.tools'), icon: <Eraser size={15} />, action: () => onSelectTool('eraser') },
+    { id: 'tool-measure', title: t('cmd.tool.measure'), category: t('cmd.category.tools'), icon: <Ruler size={15} color="#f59e0b" />, action: () => onSelectTool('measure') },
+    { id: 'tool-checkbox', title: t('cmd.tool.checkbox'), category: t('cmd.category.tools'), icon: <CheckSquare size={15} />, action: () => onSelectTool('checkbox') },
 
     // Belge İşlemleri & Dönüştürme
-    { id: 'ocr', title: 'OCR Taranmış Belgeyi Oku & Metne Çevir', category: 'İşlemler', icon: <ScanText size={15} color="#10b981" />, action: onOpenOcrModal },
-    { id: 'merge', title: 'Birden Fazla PDF\'i Birleştir', category: 'İşlemler', icon: <Layers size={15} color="#38bdf8" />, action: onOpenMergeModal },
-    { id: 'split', title: 'Sayfaları Böl & Dışa Ayıkla', category: 'İşlemler', icon: <Scissors size={15} color="#f43f5e" />, action: onOpenSplitModal },
-    { id: 'compare', title: 'İki PDF Belgesini Yan Yana Karşılaştır', category: 'İşlemler', icon: <GitCompare size={15} color="#10b981" />, action: onOpenCompareModal },
-    { id: 'watermark', title: 'Filigran (Watermark) Ekle', category: 'İşlemler', icon: <Stamp size={15} color="#e11d48" />, action: onOpenWatermarkModal },
-    { id: 'page-numbers', title: 'Sayfa Numaralandırma Şablonu Ekle', category: 'İşlemler', icon: <Hash size={15} color="#3b82f6" />, action: onOpenPageNumberingModal },
-    { id: 'export-office', title: 'Ofis Formatlarına Dışa Aktarma Merkezi (Word, Excel, PPT, CSV, MD)', category: 'İşlemler', icon: <FileSpreadsheet size={15} color="#3b82f6" />, action: onOpenExportOfficeModal },
-    { id: 'export-word', title: 'Microsoft Word Belgesine Dönüştür (.docx)', category: 'Dışa Aktar', icon: <FileText size={15} color="#2563eb" />, action: onOpenExportOfficeModal },
-    { id: 'export-excel', title: 'Microsoft Excel Tablosuna Dönüştür (.xlsx)', category: 'Dışa Aktar', icon: <FileSpreadsheet size={15} color="#16a34a" />, action: onOpenExportOfficeModal },
-    { id: 'export-pptx', title: 'PowerPoint Sunumuna Dönüştür (.pptx)', category: 'Dışa Aktar', icon: <Presentation size={15} color="#ea580c" />, action: onOpenExportOfficeModal },
-    { id: 'export-csv', title: 'CSV Veri Tablosu Olarak Kaydet (.csv)', category: 'Dışa Aktar', icon: <FileSpreadsheet size={15} color="#059669" />, action: onOpenExportOfficeModal },
-    { id: 'export-image', title: 'Sayfaları Resim Olarak Kaydet (PNG/JPG)', category: 'İşlemler', icon: <ImageIcon size={15} color="#10b981" />, action: onOpenExportImageModal },
-    { id: 'compress', title: 'PDF Boyutunu Küçült & Optimize Et', category: 'İşlemler', icon: <Minimize2 size={15} color="#f59e0b" />, action: onOpenCompressModal },
-    { id: 'security', title: 'AES-256 Parola ile Şifrele & İzinleri Kısıtla', category: 'İşlemler', icon: <Lock size={15} color="#a855f7" />, action: onOpenSecurityModal },
-    { id: 'organize', title: 'Sayfa Sıralama, Çoğaltma & Silme', category: 'İşlemler', icon: <LayoutGrid size={15} />, action: onOpenOrganizeModal },
-    { id: 'add-blank', title: 'A4 Temiz Boş Sayfa Ekle', category: 'İşlemler', icon: <Plus size={15} color="#10b981" />, action: onAddBlankPage },
+    { id: 'ocr', title: t('cmd.ocr'), category: t('cmd.category.operations'), icon: <ScanText size={15} color="#10b981" />, action: onOpenOcrModal },
+    { id: 'merge', title: t('cmd.merge'), category: t('cmd.category.operations'), icon: <Layers size={15} color="#38bdf8" />, action: onOpenMergeModal },
+    { id: 'split', title: t('cmd.split'), category: t('cmd.category.operations'), icon: <Scissors size={15} color="#f43f5e" />, action: onOpenSplitModal },
+    { id: 'compare', title: t('cmd.compare'), category: t('cmd.category.operations'), icon: <GitCompare size={15} color="#10b981" />, action: onOpenCompareModal },
+    { id: 'watermark', title: t('cmd.watermark'), category: t('cmd.category.operations'), icon: <Stamp size={15} color="#e11d48" />, action: onOpenWatermarkModal },
+    { id: 'page-numbers', title: t('cmd.pageNumbers'), category: t('cmd.category.operations'), icon: <Hash size={15} color="#3b82f6" />, action: onOpenPageNumberingModal },
+    { id: 'export-office', title: t('cmd.exportOffice'), category: t('cmd.category.operations'), icon: <FileSpreadsheet size={15} color="#3b82f6" />, action: onOpenExportOfficeModal },
+    { id: 'export-word', title: t('cmd.exportWord'), category: t('cmd.category.export'), icon: <FileText size={15} color="#2563eb" />, action: onOpenExportOfficeModal },
+    { id: 'export-excel', title: t('cmd.exportExcel'), category: t('cmd.category.export'), icon: <FileSpreadsheet size={15} color="#16a34a" />, action: onOpenExportOfficeModal },
+    { id: 'export-pptx', title: t('cmd.exportPptx'), category: t('cmd.category.export'), icon: <Presentation size={15} color="#ea580c" />, action: onOpenExportOfficeModal },
+    { id: 'export-csv', title: t('cmd.exportCsv'), category: t('cmd.category.export'), icon: <FileSpreadsheet size={15} color="#059669" />, action: onOpenExportOfficeModal },
+    { id: 'export-image', title: t('cmd.exportImage'), category: t('cmd.category.operations'), icon: <ImageIcon size={15} color="#10b981" />, action: onOpenExportImageModal },
+    { id: 'compress', title: t('cmd.compress'), category: t('cmd.category.operations'), icon: <Minimize2 size={15} color="#f59e0b" />, action: onOpenCompressModal },
+    { id: 'security', title: t('cmd.security'), category: t('cmd.category.operations'), icon: <Lock size={15} color="#a855f7" />, action: onOpenSecurityModal },
+    { id: 'organize', title: t('cmd.organize'), category: t('cmd.category.operations'), icon: <LayoutGrid size={15} />, action: onOpenOrganizeModal },
+    { id: 'add-blank', title: t('cmd.addBlank'), category: t('cmd.category.operations'), icon: <Plus size={15} color="#10b981" />, action: onAddBlankPage },
 
     // Görünüm & Sistem
-    { id: 'fullscreen', title: 'Tam Ekran Sunum & Okuma Modu', category: 'Görünüm', icon: <Maximize2 size={15} />, shortcut: 'F11', action: onToggleFullscreen },
-    { id: 'fit-page', title: 'Sayfaya Sığdır (Fit to Page)', category: 'Görünüm', icon: <Maximize2 size={15} />, shortcut: 'Ctrl+0', action: onFitPage },
-    { id: 'fit-width', title: 'Genişliğe Sığdır (Fit to Width)', category: 'Görünüm', icon: <Maximize2 size={15} />, shortcut: 'Ctrl+1', action: onFitWidth },
-    { id: 'search', title: 'PDF İçinde Kelime Ara', category: 'Görünüm', icon: <Search size={15} />, shortcut: 'Ctrl+F', action: onToggleSearch },
-    { id: 'theme', title: 'Açık / Karanlık Tema Değiştir', category: 'Görünüm', icon: <Sun size={15} color="#f59e0b" />, action: onToggleTheme },
-    { id: 'reader-dark', title: 'Göz Yormayan Gece Modu Filtresi', category: 'Görünüm', icon: <Moon size={15} />, action: () => onReaderFilterChange('dark') },
-    { id: 'reader-sepia', title: 'Sıcak Kitap Kağıdı Sepia Filtresi', category: 'Görünüm', icon: <Eye size={15} color="#b45309" />, action: () => onReaderFilterChange('sepia') },
-    { id: 'settings', title: 'Uygulama Ayarları & Tercihler', category: 'Görünüm', icon: <SettingsIcon size={15} color="#6366f1" />, action: onOpenSettingsModal },
+    { id: 'fullscreen', title: t('cmd.fullscreen'), category: t('cmd.category.view'), icon: <Maximize2 size={15} />, shortcut: 'F11', action: onToggleFullscreen },
+    { id: 'fit-page', title: t('cmd.fitPage'), category: t('cmd.category.view'), icon: <Maximize2 size={15} />, shortcut: 'Ctrl+0', action: onFitPage },
+    { id: 'fit-width', title: t('cmd.fitWidth'), category: t('cmd.category.view'), icon: <Maximize2 size={15} />, shortcut: 'Ctrl+1', action: onFitWidth },
+    { id: 'search', title: t('cmd.search'), category: t('cmd.category.view'), icon: <Search size={15} />, shortcut: 'Ctrl+F', action: onToggleSearch },
+    { id: 'theme', title: t('cmd.theme'), category: t('cmd.category.view'), icon: <Sun size={15} color="#f59e0b" />, action: onToggleTheme },
+    { id: 'reader-dark', title: t('cmd.readerDark'), category: t('cmd.category.view'), icon: <Moon size={15} />, action: () => onReaderFilterChange('dark') },
+    { id: 'reader-sepia', title: t('cmd.readerSepia'), category: t('cmd.category.view'), icon: <Eye size={15} color="#b45309" />, action: () => onReaderFilterChange('sepia') },
+    { id: 'settings', title: t('cmd.settings'), category: t('cmd.category.view'), icon: <SettingsIcon size={15} color="#6366f1" />, action: onOpenSettingsModal },
+    { id: 'comments-panel', title: t('cmd.commentsPanel'), category: t('cmd.category.view'), icon: <MessageSquare size={15} color="#f59e0b" />, action: onOpenCommentsPanel },
+    { id: 'links-panel', title: t('cmd.linksPanel'), category: t('cmd.category.view'), icon: <Link2 size={15} color="#38bdf8" />, action: onOpenLinksPanel },
+    { id: 'bookmarks-panel', title: t('cmd.bookmarksPanel'), category: t('cmd.category.view'), icon: <BookmarkIcon size={15} color="#a855f7" />, action: onOpenBookmarksPanel },
+    { id: 'forms-panel', title: t('cmd.formsPanel'), category: t('cmd.category.view'), icon: <FileTextIcon size={15} color="#22c55e" />, action: onOpenFormsPanel },
+    { id: 'document-inspector', title: t('cmd.inspector'), category: t('cmd.category.operations'), icon: <ScanSearch size={15} color="#a855f7" />, action: onOpenInspectorModal },
+    { id: 'page-setup', title: t('cmd.pageSetup'), category: t('cmd.category.operations'), icon: <Layers size={15} color="#0ea5e9" />, action: onOpenPageSetupModal },
+    { id: 'accessibility', title: t('cmd.accessibility'), category: t('cmd.category.operations'), icon: <Accessibility size={15} color="#a855f7" />, action: onOpenAccessibilityModal },
+    { id: 'pdfa', title: t('cmd.pdfa'), category: t('cmd.category.operations'), icon: <FileBadge size={15} color="#0ea5e9" />, action: onOpenPdfaModal },
+    { id: 'pades', title: t('cmd.pades'), category: t('cmd.category.operations'), icon: <Lock size={15} color="#a855f7" />, action: onOpenPadesModal },
   ];
 
   const filteredCommands = commands.filter((cmd) => {
@@ -257,7 +292,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Bir komut veya araç arayın... (Örn: İmza, OCR, Birleştir, Word)"
+            placeholder={t('cmd.searchPlaceholder')}
             style={{
               flex: 1,
               background: 'transparent',
@@ -372,11 +407,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           color: 'var(--text-muted)',
         }}>
           <div style={{ display: 'flex', gap: '12px' }}>
-            <span><kbd>↑↓</kbd> Gezin</span>
-            <span><kbd>Enter</kbd> Seç</span>
-            <span><kbd>Esc</kbd> Kapat</span>
+            <span><kbd>↑↓</kbd> {t('cmd.navigate')}</span>
+            <span><kbd>Enter</kbd> {t('cmd.enterSelect')}</span>
+            <span><kbd>Esc</kbd> {t('cmd.escClose')}</span>
           </div>
-          <span>PDF Studio Pro Command Palette</span>
+          <span>{t('cmd.footer')}</span>
         </div>
       </div>
     </div>

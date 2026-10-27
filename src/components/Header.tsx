@@ -33,8 +33,14 @@ import {
   Settings as SettingsIcon,
   Command,
   Info,
+  ScanSearch,
+  Accessibility,
+  FileBadge,
+  Globe,
   Maximize2
 } from 'lucide-react';
+import { type Locale } from '../utils/i18n';
+import { t } from '../utils/i18n';
 import type { PDFDocumentState, ReaderFilter } from '../types/pdf';
 
 interface HeaderProps {
@@ -78,9 +84,18 @@ interface HeaderProps {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   onOpenProperties?: () => void;
+  onOpenInspectorModal?: () => void;
+  onOpenPageSetupModal?: () => void;
+  onOpenAccessibilityModal?: () => void;
+  onOpenPdfaModal?: () => void;
+  onOpenPadesModal?: () => void;
   onOpenCommandPalette?: () => void;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
+  /** Current interface language. */
+  language?: Locale;
+  /** Called when the user changes the language. */
+  onLanguageChange?: (lang: Locale) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -124,9 +139,16 @@ export const Header: React.FC<HeaderProps> = ({
   sidebarOpen,
   onToggleSidebar,
   onOpenProperties,
+  onOpenInspectorModal,
+  onOpenPageSetupModal,
+  onOpenAccessibilityModal,
+  onOpenPdfaModal,
+  onOpenPadesModal,
   onOpenCommandPalette,
   isFullscreen = false,
   onToggleFullscreen,
+  language = 'en',
+  onLanguageChange,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pageInput, setPageInput] = useState(String(currentPageNumber || 1));
@@ -190,7 +212,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button 
           onClick={onToggleSidebar}
           className={`btn-icon ${sidebarOpen ? 'active' : ''}`}
-          data-tooltip="Sol Panel (Sayfalar & İçindekiler)"
+          data-tooltip={t('action.sidebar')}
           style={{ width: '32px', height: '32px' }}
         >
           <Layers size={16} />
@@ -224,7 +246,7 @@ export const Header: React.FC<HeaderProps> = ({
               }}>PRO</span>
             </div>
             <div style={{ fontSize: '10px', color: 'var(--text-muted)', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {docState.filename || 'Belge Yok'}
+              {docState.filename || t('welcome.no-document')}
             </div>
           </div>
         </div>
@@ -241,33 +263,33 @@ export const Header: React.FC<HeaderProps> = ({
         <button 
           onClick={onOpenNativePdf || (() => fileInputRef.current?.click())} 
           className="btn-ghost" 
-          data-tooltip="PDF Aç (Ctrl+O)"
+          data-tooltip={t('header.open')}
           style={{ fontSize: '12px', padding: '5px 8px', gap: '5px' }}
         >
           <FolderOpen size={14} />
-          <span className="header-btn-label">Aç</span>
+          <span className="header-btn-label">{t('header.open')}</span>
         </button>
 
         {/* Primary Direct Save Button (Ctrl+S) */}
         <button 
           onClick={onSavePdf} 
           className="btn-primary" 
-          data-tooltip="Kaydet (Ctrl+S)"
+          data-tooltip={t('header.save')}
           style={{ fontSize: '12px', padding: '5px 9px', gap: '5px', fontWeight: 600 }}
         >
           <Save size={13} />
-          <span>Kaydet</span>
+          <span>{t('header.save')}</span>
         </button>
 
         {/* Save As Button (Ctrl+Shift+S) */}
         <button 
           onClick={onSaveAsPdf} 
           className="btn-ghost" 
-          data-tooltip="Farklı Kaydet... (Ctrl+Shift+S)"
+          data-tooltip={t('header.saveAs')}
           style={{ fontSize: '12px', padding: '5px 8px', gap: '4px' }}
         >
           <Download size={13} />
-          <span className="header-btn-label">Farklı Kaydet</span>
+          <span className="header-btn-label">{t('header.saveAs')}</span>
         </button>
 
         {/* Unified Operations Dropdown */}
@@ -275,11 +297,11 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={() => setToolsDropdownOpen(!toolsDropdownOpen)}
             className={`btn-ghost ${toolsDropdownOpen ? 'active' : ''}`}
-            data-tooltip="Gelişmiş Belge Araçları"
+            data-tooltip={t('header.tools')}
             style={{ fontSize: '12px', padding: '5px 8px', gap: '4px' }}
           >
             <Sparkles size={14} color="var(--accent-primary)" />
-            <span className="header-btn-label">İşlemler</span>
+            <span className="header-btn-label">{t('header.tools')}</span>
             <ChevronDown size={12} style={{ opacity: 0.7 }} />
           </button>
 
@@ -392,6 +414,56 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
 
+              {onOpenInspectorModal && docState.data && (
+                <button
+                  onClick={() => { onOpenInspectorModal(); setToolsDropdownOpen(false); }}
+                  className="btn-ghost"
+                  style={{ justifyContent: 'flex-start', padding: '7px 10px', fontSize: '12px', gap: '8px' }}
+                >
+                  <ScanSearch size={14} color="#a855f7" /> Belge Denetleyicisi — Gizli Bilgi Temizliği
+                </button>
+              )}
+
+              {onOpenPageSetupModal && docState.data && (
+                <button
+                  onClick={() => { onOpenPageSetupModal(); setToolsDropdownOpen(false); }}
+                  className="btn-ghost"
+                  style={{ justifyContent: 'flex-start', padding: '7px 10px', fontSize: '12px', gap: '8px' }}
+                >
+                  <Layers size={14} color="#0ea5e9" /> Sayfa Ayarları — Etiket, Geçiş & Kutu
+                </button>
+              )}
+
+              {onOpenAccessibilityModal && docState.data && (
+                <button
+                  onClick={() => { onOpenAccessibilityModal(); setToolsDropdownOpen(false); }}
+                  className="btn-ghost"
+                  style={{ justifyContent: 'flex-start', padding: '7px 10px', fontSize: '12px', gap: '8px' }}
+                >
+                  <Accessibility size={14} color="#a855f7" /> Erişilebilirlik Denetleyicisi
+                </button>
+              )}
+
+              {onOpenPdfaModal && docState.data && (
+                <button
+                  onClick={() => { onOpenPdfaModal(); setToolsDropdownOpen(false); }}
+                  className="btn-ghost"
+                  style={{ justifyContent: 'flex-start', padding: '7px 10px', fontSize: '12px', gap: '8px' }}
+                >
+                  <FileBadge size={14} color="#0ea5e9" /> PDF/A Hazırlığı (Arşiv Uyumu)
+                </button>
+              )}
+
+              {onOpenPadesModal && docState.data && (
+                <button
+                  onClick={() => { onOpenPadesModal(); setToolsDropdownOpen(false); }}
+                  className="btn-ghost"
+                  style={{ justifyContent: 'flex-start', padding: '7px 10px', fontSize: '12px', gap: '8px' }}
+                >
+                  <Lock size={14} color="#a855f7" /> PAdES Dijital İmza Hazırlığı
+                </button>
+              )}
+
               {onOpenCommandPalette && (
                 <button
                   onClick={() => { onOpenCommandPalette(); setToolsDropdownOpen(false); }}
@@ -435,7 +507,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={onUndo} 
             disabled={!canUndo} 
             className="btn-icon" 
-            data-tooltip="Geri Al (Ctrl+Z)"
+            data-tooltip={t('action.undo')}
             style={{ width: '28px', height: '28px' }}
           >
             <Undo2 size={14} />
@@ -444,7 +516,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={onRedo} 
             disabled={!canRedo} 
             className="btn-icon" 
-            data-tooltip="Yinele (Ctrl+Y)"
+            data-tooltip={t('action.redo')}
             style={{ width: '28px', height: '28px' }}
           >
             <Redo2 size={14} />
@@ -466,7 +538,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => onPageNumberChange(Math.max(1, currentPageNumber - 1))}
             disabled={currentPageNumber <= 1}
             className="btn-icon"
-            data-tooltip="Önceki Sayfa"
+            data-tooltip={t('nav.prevpage')}
             style={{ width: '24px', height: '24px' }}
           >
             <ChevronLeft size={14} />
@@ -500,7 +572,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => onPageNumberChange(Math.min(totalPages, currentPageNumber + 1))}
             disabled={currentPageNumber >= totalPages}
             className="btn-icon"
-            data-tooltip="Sonraki Sayfa"
+            data-tooltip={t('nav.nextpage')}
             style={{ width: '24px', height: '24px' }}
           >
             <ChevronRight size={14} />
@@ -521,7 +593,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button 
             onClick={() => onZoomChange(Math.max(0.25, zoom - 0.15))} 
             className="btn-icon" 
-            data-tooltip="Uzaklaştır"
+            data-tooltip={t('action.zoomOut')}
             style={{ width: '24px', height: '24px' }}
           >
             <ZoomOut size={13} />
@@ -529,7 +601,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <span 
             onClick={onFitPage}
-            data-tooltip="Tıklayın: Sayfaya Sığdır"
+            data-tooltip={t('action.fitPage')}
             style={{ 
               fontSize: '11px', 
               fontWeight: 600, 
@@ -545,7 +617,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button 
             onClick={() => onZoomChange(Math.min(4.0, zoom + 0.15))} 
             className="btn-icon" 
-            data-tooltip="Yakınlaştır"
+            data-tooltip={t('action.zoomIn')}
             style={{ width: '24px', height: '24px' }}
           >
             <ZoomIn size={13} />
@@ -555,7 +627,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onToggleSearch}
           className={`btn-icon ${isSearchOpen ? 'active' : ''}`}
-          data-tooltip="PDF İçinde Ara (Ctrl+F)"
+          data-tooltip={t('action.search')}
           style={{ width: '28px', height: '28px' }}
         >
           <Search size={14} color={isSearchOpen ? 'var(--accent-primary)' : 'inherit'} />
@@ -569,7 +641,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={() => setFilterDropdownOpen(!filterDropdownOpen)}
             className={`btn-icon ${readerFilter !== 'normal' ? 'active' : ''}`}
-            data-tooltip="Göz Yormayan Okuma Modları"
+            data-tooltip={t('action.filter')}
             style={{ width: '30px', height: '30px' }}
           >
             <Eye size={15} color={readerFilter !== 'normal' ? 'var(--accent-primary)' : 'inherit'} />
@@ -631,17 +703,17 @@ export const Header: React.FC<HeaderProps> = ({
         <button 
           onClick={onOpenOrganizeModal} 
           className="btn-ghost" 
-          data-tooltip="Sayfa Sıralama & Yönetim"
+          data-tooltip={t('header.organize')}
           style={{ fontSize: '12px', padding: '5px 8px', gap: '4px' }}
         >
           <LayoutGrid size={14} />
-          <span className="header-btn-label">Sayfalar</span>
+          <span className="header-btn-label">{t('header.organize')}</span>
         </button>
 
         <button 
           onClick={onPrint} 
           className="btn-icon" 
-          data-tooltip="Yazdır (Ctrl+P)"
+          data-tooltip={t('action.print')}
           style={{ width: '30px', height: '30px' }}
         >
           <Printer size={15} />
@@ -650,17 +722,30 @@ export const Header: React.FC<HeaderProps> = ({
         <button 
           onClick={onToggleTheme} 
           className="btn-icon" 
-          data-tooltip={theme === 'dark' ? 'Açık Tema' : 'Karanlık Tema'}
+          data-tooltip={theme === 'dark' ? t('settings.theme-light') : t('settings.theme-dark')}
           style={{ width: '30px', height: '30px' }}
         >
           {theme === 'dark' ? <Sun size={15} color="#f59e0b" /> : <Moon size={15} />}
         </button>
 
+        {onLanguageChange && (
+          <button
+            onClick={() => onLanguageChange(language === 'en' ? 'tr' : 'en')}
+            className="btn-icon"
+            data-tooltip={
+              language === 'en' ? t('settings.language-tr') : t('settings.language-en')
+            }
+            style={{ width: '30px', height: '30px' }}
+          >
+            <Globe size={14} />
+          </button>
+        )}
+
         {onOpenCommandPalette && (
           <button 
             onClick={onOpenCommandPalette} 
             className="btn-icon" 
-            data-tooltip="Hızlı Komut Paleti (Ctrl+K)"
+            data-tooltip={t('header.commandPalette')}
             style={{ width: '30px', height: '30px' }}
           >
             <Command size={15} color="var(--accent-primary)" />
@@ -671,7 +756,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button 
             onClick={onToggleFullscreen} 
             className={`btn-icon ${isFullscreen ? 'active' : ''}`} 
-            data-tooltip={isFullscreen ? 'Tam Ekrandan Çık (Esc / F11)' : 'Sunum & Tam Ekran Modu (F11)'}
+            data-tooltip={isFullscreen ? t('action.closeFullscreen') : t('action.fullscreen')}
             style={{ width: '30px', height: '30px' }}
           >
             {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
@@ -681,7 +766,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button 
           onClick={onOpenSettingsModal} 
           className="btn-icon" 
-          data-tooltip="Uygulama Ayarları & Tercihler"
+          data-tooltip={t('action.settings')}
           style={{ width: '30px', height: '30px' }}
         >
           <SettingsIcon size={15} />
@@ -690,7 +775,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button 
           onClick={onOpenAboutModal} 
           className="btn-icon" 
-          data-tooltip="Hakkında & Kısayollar"
+          data-tooltip={t('action.about')}
           style={{ width: '30px', height: '30px' }}
         >
           <HelpCircle size={15} color="var(--accent-primary)" />

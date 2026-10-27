@@ -17,7 +17,9 @@ import type {
   RedactionAnnotation,
   ExtractedPdfTextItem,
   SearchMatch,
-  ReaderFilter
+  ReaderFilter,
+  PdfComment,
+  PdfLink
 } from '../types/pdf';
 import { getSharedPdfDoc } from '../utils/pdfInit';
 import { detectVisibleContent } from '../utils/blankPage';
@@ -55,6 +57,14 @@ interface PDFViewerProps {
   onZoomChange?: (newZoom: number) => void;
   /** Whether to prompt before sending a selection to the translation service. */
   confirmTextTranslation?: boolean;
+  /** The review comments of the document, drawn over the pages. */
+  comments?: readonly PdfComment[];
+  /** Place a new comment at a point of a page. */
+  onAddComment?: (pageIndex: number, point: { x: number; y: number }) => void;
+  /** The hyperlinks of the document, drawn over the pages. */
+  links?: readonly PdfLink[];
+  /** Place a new link over an area of a page. */
+  onAddLink?: (pageIndex: number, rect: { x: number; y: number; width: number; height: number }) => void;
 }
 
 interface PageItemProps {
@@ -89,6 +99,22 @@ const MAX_CANVAS_DPR = 2.5;
  * change — including each pointer move of a drag.
  */
 const EMPTY_ANNOTATIONS: readonly Annotation[] = [];
+
+/**
+ * Shared empty comment list.
+ *
+ * The same reason as {@link EMPTY_ANNOTATIONS}: a fresh array on every
+ * render would defeat the memoisation of the page.
+ */
+const EMPTY_COMMENTS: readonly PdfComment[] = [];
+
+/**
+ * Shared empty link list.
+ *
+ * The same reason as {@link EMPTY_ANNOTATIONS}: a fresh array on every
+ * render would defeat the memoisation of the page.
+ */
+const EMPTY_LINKS: readonly PdfLink[] = [];
 
 /** Assigns a stable numeric id to each document buffer. Weak, so it self-clears. */
 const documentIds = new WeakMap<ArrayBuffer, number>();
@@ -125,6 +151,10 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   readerFilter = 'normal',
   onZoomChange,
   confirmTextTranslation = true,
+  comments = EMPTY_COMMENTS,
+  onAddComment,
+  links = EMPTY_LINKS,
+  onAddLink,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -351,6 +381,10 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
           searchMatches={searchMatches}
           activeMatchIndex={activeMatchIndex}
           readerFilter={readerFilter}
+          comments={comments}
+          onAddComment={onAddComment}
+          links={links}
+          onAddLink={onAddLink}
         />
       ))}
     </div>
@@ -385,6 +419,10 @@ interface PageItemProps {
   searchMatches: SearchMatch[];
   activeMatchIndex: number;
   readerFilter: ReaderFilter;
+  comments: readonly PdfComment[];
+  onAddComment?: (pageIndex: number, point: { x: number; y: number }) => void;
+  links: readonly PdfLink[];
+  onAddLink?: (pageIndex: number, rect: { x: number; y: number; width: number; height: number }) => void;
 }
 
 /**
@@ -448,6 +486,10 @@ const PageItemImpl: React.FC<PageItemProps> = ({
   activeMatchIndex,
   readerFilter,
   confirmTextTranslation,
+  comments,
+  onAddComment,
+  links,
+  onAddLink,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -1069,6 +1111,80 @@ const PageItemImpl: React.FC<PageItemProps> = ({
       ctx.restore();
     });
 
+    // 2b. Draw the review comments of the page.
+    //
+    // The comments are real annotations in the file, so they are drawn the
+    // way a reader draws them: a note as the folded corner of a sticky
+    // note, a text markup as a translucent band over the marked text.
+    const pageComments = comments.filter((comment) => comment.pageIndex === page.pageIndex);
+    pageComments.forEach((comment) => {
+      ctx.save();
+      const color = comment.color || (comment.kind === 'note' ? '#f59e0b' : '#22c55e');
+
+      if (comment.kind === 'note') {
+        const x = comment.rect.x;
+        const y = comment.rect.y;
+        const w = comment.rect.width || 20;
+        const h = comment.rect.height || 20;
+
+        ctx.fillStyle = '#fde68a';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + w, y);
+        ctx.lineTo(x + w, y + h - 6);
+        ctx.lineTo(x + w - 6, y + h);
+        ctx.lineTo(x, y + h);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // A resolved comment is dimmed, so the open ones stand out.
+        if (comment.status) {
+          ctx.globalAlpha = 0.55;
+          ctx.fillStyle = color;
+          ctx.fill();
+        }
+      } else {
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = color;
+        ctx.fillRect(comment.rect.x, comment.rect.y, comment.rect.width, comment.rect.height);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        if (comment.kind === 'underline') {
+          const y = comment.rect.y + comment.rect.height;
+          ctx.moveTo(comment.rect.x, y);
+          ctx.lineTo(comment.rect.x + comment.rect.width, y);
+        } else if (comment.kind === 'strikeout') {
+          const y = comment.rect.y + comment.rect.height / 2;
+          ctx.moveTo(comment.rect.x, y);
+          ctx.lineTo(comment.rect.x + comment.rect.width, y);
+        }
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    });
+
+    // 2c. Draw the hyperlinks of the page.
+    //
+    // A reader does not paint a link, so the app marks the areas that
+    // click somewhere. The mark is only on the overlay; the file keeps the
+    // link itself.
+    const pageLinks = links.filter((link) => link.pageIndex === page.pageIndex);
+    pageLinks.forEach((link) => {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.85)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.strokeRect(link.rect.x, link.rect.y, link.rect.width, link.rect.height);
+      ctx.setLineDash([]);
+      ctx.restore();
+    });
+
     // 3. LIVE Freehand Drawing Stroke Preview
     if (isDrawing && drawingPoints.length > 1) {
       ctx.save();
@@ -1122,6 +1238,14 @@ const PageItemImpl: React.FC<PageItemProps> = ({
         ctx.moveTo(currentShapePreview.x, currentShapePreview.y);
         ctx.lineTo(currentShapePreview.x + currentShapePreview.w, currentShapePreview.y + currentShapePreview.h);
         ctx.stroke();
+      } else if (activeConfig.tool === 'link') {
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
+        ctx.strokeRect(currentShapePreview.x, currentShapePreview.y, currentShapePreview.w, currentShapePreview.h);
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
+        ctx.fillRect(currentShapePreview.x, currentShapePreview.y, currentShapePreview.w, currentShapePreview.h);
       } else if (activeConfig.tool === 'measure' && shapeStart) {
         ctx.strokeStyle = '#f59e0b';
         ctx.lineWidth = 2;
@@ -1145,7 +1269,7 @@ const PageItemImpl: React.FC<PageItemProps> = ({
       }
       ctx.restore();
     }
-  }, [annotations, selectedAnnotation, currentShapePreview, isDrawing, drawingPoints, zoom, editingTextId, activeConfig, pageWidth, pageHeight, rawWidth, rawHeight, pageRotation, display.width, display.height, pixelsPerCssPixel, searchMatches, activeMatchIndex, renderTrigger, shapeStart, isVisible, page.pageIndex]);
+  }, [annotations, comments, links, selectedAnnotation, currentShapePreview, isDrawing, drawingPoints, zoom, editingTextId, activeConfig, pageWidth, pageHeight, rawWidth, rawHeight, pageRotation, display.width, display.height, pixelsPerCssPixel, searchMatches, activeMatchIndex, renderTrigger, shapeStart, isVisible, page.pageIndex]);
 
   /**
    * Map a pointer position into unrotated page space.
@@ -1508,6 +1632,13 @@ const PageItemImpl: React.FC<PageItemProps> = ({
       return;
     }
 
+    if (activeConfig.tool === 'comment') {
+      // The comment is anchored at the point that was clicked; the panel
+      // asks for its text and the app writes it into the file.
+      onAddComment?.(page.pageIndex, { x: pt.x, y: pt.y });
+      return;
+    }
+
     if (activeConfig.tool === 'select') {
       const clickedAnn = findHitAnnotation(pt);
 
@@ -1557,7 +1688,7 @@ const PageItemImpl: React.FC<PageItemProps> = ({
       return;
     }
 
-    if (['rect', 'circle', 'line', 'arrow', 'redact', 'measure'].includes(activeConfig.tool)) {
+    if (['rect', 'circle', 'line', 'arrow', 'redact', 'measure', 'link'].includes(activeConfig.tool)) {
       setShapeStart(pt);
       setCurrentShapePreview({ x: pt.x, y: pt.y, w: 0, h: 0 });
     }
@@ -1675,6 +1806,27 @@ const PageItemImpl: React.FC<PageItemProps> = ({
           : (activeConfig.opacity !== undefined ? activeConfig.opacity : 1.0),
         points: stroke,
       } as DrawingAnnotation);
+      return;
+    }
+
+    if (activeConfig.tool === 'link') {
+      // The link covers the area the user selected on the page. A click
+      // without a drag makes a small area around the point, because a link
+      // needs an area to click.
+      const end = e ? getPdfCoords(e) : null;
+      const origin = shapeStart ?? end;
+      if (origin && end) {
+        const x = Math.min(origin.x, end.x);
+        const y = Math.min(origin.y, end.y);
+        onAddLink?.(page.pageIndex, {
+          x,
+          y,
+          width: Math.max(8, Math.abs(end.x - origin.x)),
+          height: Math.max(8, Math.abs(end.y - origin.y)),
+        });
+      }
+      setShapeStart(null);
+      setCurrentShapePreview(null);
       return;
     }
 

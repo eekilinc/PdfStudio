@@ -140,7 +140,9 @@ export async function applyRedactions(
   // cache — going through it would evict the document the viewer is rendering.
   const loadingTask = pdfjsLib.getDocument({ data: bytes.slice() });
   const rendered = await loadingTask.promise;
-  const outDoc = await PDFDocument.load(bytes);
+  // The metadata is left as it is: pdf-lib stamps its own name over the
+  // producer of every document it loads.
+  const outDoc = await PDFDocument.load(bytes, { updateMetadata: false });
   const targets = Array.from(byOutputPage.entries());
 
   try {

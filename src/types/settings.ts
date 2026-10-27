@@ -20,9 +20,34 @@ export interface AppSettings {
   rememberRecentFiles: boolean;
   maxRecentFiles: number;
   showWelcomeScreenOnStartup: boolean;
+  /**
+   * Whether a recovery copy of the open document is kept.
+   *
+   * The copy is written while the document has unsaved changes, so the work
+   * survives an unexpected exit. It is removed as soon as the document is
+   * saved.
+   */
+  autoSave: boolean;
+  /** How often the recovery copy is written, in minutes. */
+  autoSaveIntervalMinutes: number;
 
   // 4. OCR & Engine
   defaultOcrLanguage: 'tur' | 'eng' | 'deu' | 'fra';
+
+  /**
+   * The interface language of the application.
+   *
+   * Changing this requires a restart for full effect.
+   */
+  language: 'en' | 'tr';
+
+  /**
+   * The name written into a review comment.
+   *
+   * A comment is a real annotation in the file, and the author is what the
+   * other readers of the document see next to it.
+   */
+  commentAuthor: string;
 
   // 5. Privacy
   /**
@@ -51,7 +76,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxRecentFiles: 8,
   showWelcomeScreenOnStartup: true,
 
+  autoSave: true,
+  autoSaveIntervalMinutes: 1,
+
   defaultOcrLanguage: 'tur',
+  language: 'tr',
+
+  commentAuthor: 'PDF Studio Kullanıcısı',
 
   // On by default: the prompt is the only thing standing between a document
   // fragment and a third-party host.

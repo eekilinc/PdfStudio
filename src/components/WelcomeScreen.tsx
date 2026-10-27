@@ -11,9 +11,11 @@ import {
   FileText, 
   Trash2,
   UploadCloud,
-  ChevronRight
+  ChevronRight,
+  RotateCcw
 } from 'lucide-react';
 import { APP_VERSION } from '../version';
+import { t } from '../utils/i18n';
 
 export interface RecentFile {
   name: string;
@@ -29,6 +31,10 @@ interface WelcomeScreenProps {
   onLoadSample: () => void;
   onOpenMergeModal: () => void;
   onOpenSplitModal: () => void;
+  /** A recovery copy of a document that was not saved before the last exit. */
+  recovery?: { filename: string; savedAt: number } | null;
+  onRestoreRecovery?: () => void;
+  onDiscardRecovery?: () => void;
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
@@ -39,6 +45,9 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   onLoadSample,
   onOpenMergeModal,
   onOpenSplitModal,
+  recovery,
+  onRestoreRecovery,
+  onDiscardRecovery,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -107,7 +116,50 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       />
 
       <div style={{ maxWidth: '820px', width: '100%', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        
+
+        {/* RECOVERY OF AN UNSAVED DOCUMENT */}
+        {recovery && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '12px 16px',
+              borderRadius: 'var(--radius-lg)',
+              background: 'rgba(245, 158, 11, 0.10)',
+              border: '1px solid rgba(245, 158, 11, 0.35)',
+            }}
+          >
+            <RotateCcw size={20} color="#f59e0b" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '13px', fontWeight: 700 }}>
+                Kaydedilmemiş bir belge bulundu
+              </div>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                <strong>{recovery.filename}</strong> dosyasında son kaydedilmemiş değişiklikler bulunuyor
+                {recovery.savedAt
+                  ? ` (${new Date(recovery.savedAt).toLocaleString('tr-TR')})`
+                  : ''}
+                .
+              </div>
+            </div>
+            <button
+              className="btn-primary"
+              style={{ fontSize: '11.5px', padding: '6px 12px', whiteSpace: 'nowrap' }}
+              onClick={onRestoreRecovery}
+            >
+              Kurtar
+            </button>
+            <button
+              className="btn-ghost"
+              style={{ fontSize: '11.5px', padding: '6px 10px', whiteSpace: 'nowrap' }}
+              onClick={onDiscardRecovery}
+            >
+              Sil
+            </button>
+          </div>
+        )}
+
         {/* HERO TITLE & BRANDING */}
         <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
           <div style={{
@@ -153,7 +205,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               <span style={{ fontSize: '11px', background: 'rgba(56, 189, 248, 0.15)', color: 'var(--accent-primary)', padding: '2px 7px', borderRadius: '6px', fontWeight: 600 }}>v{APP_VERSION}</span>
             </h1>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              Hızlı, Güvenli ve %100 Çevrimdışı Modern Masaüstü PDF Düzenleyici
+              {t('welcome.subtitle')}
             </p>
           </div>
         </div>
@@ -192,7 +244,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
           <div>
             <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-              PDF Dosyası Açmak İçin Tıklayın
+              {t('welcome.open-pdf')}
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
               veya dosyayı doğrudan bu alana sürükleyip bırakın (Drag & Drop)
@@ -209,7 +261,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             }}
           >
             <FolderOpen size={16} />
-            <span>Dosya Seç</span>
+            <span>{t('welcome.browse')}</span>
           </button>
         </div>
 
@@ -341,7 +393,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
                 <Clock size={15} color="var(--accent-primary)" />
-                <span>Son Açılan Belgeler</span>
+                <span>{t('welcome.recentFiles')}</span>
               </div>
               <button 
                 onClick={handleClearRecent}
@@ -410,11 +462,11 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <Zap size={13} color="#f59e0b" />
-            <span>Rust & WebAssembly Motoru</span>
+            <span>{t('welcome.engine')}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <ShieldCheck size={13} color="#10b981" />
-            <span>%100 Çevrimdışı & Yerel Gizlilik</span>
+            <span>{t('welcome.privacy')}</span>
           </div>
         </div>
 

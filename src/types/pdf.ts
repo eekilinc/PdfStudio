@@ -1,4 +1,4 @@
-export type ToolType = 
+export type ToolType =
   | 'select'
   | 'pan'
   | 'edit-text'
@@ -15,7 +15,9 @@ export type ToolType =
   | 'measure'
   | 'checkbox'
   | 'redact'
-  | 'eraser';
+  | 'eraser'
+  | 'comment'
+  | 'link';
 
 export type AnnotationType = 
   | 'pen'
@@ -145,6 +147,38 @@ export interface PDFDocumentState {
   pages: PageState[];
   pageOrder: number[]; // Array of page indices
   annotations: Record<number, Annotation[]>; // key is pageIndex
+  /**
+   * Review comments, read from the file when it was opened and added to
+   * while it is open. They are written back as real PDF annotations, so
+   * the file keeps them across saves and other readers can answer them.
+   */
+  comments?: PdfComment[];
+  /** Values filled into the interactive form, keyed by field name. */
+  formValues?: Record<string, FormFieldValue>;
+  /** The fields of the interactive form, as the file holds them. */
+  formFields?: FormFieldInfo[];
+  /** The hyperlinks of the document, read from the file and edited here. */
+  links?: PdfLink[];
+  /** The bookmarks of the document, read from the file and edited here. */
+  bookmarks?: PdfBookmark[];
+  /** The page labels of the document. */
+  pageLabels?: PageLabelRange[];
+  /** The page transitions of the document. */
+  pageTransitions?: PageTransition[];
+  /** The page boxes of the document. */
+  pageBoxes?: PageBoxSettings[];
+  /** What the accessibility checker found and what was done about it. */
+  accessibility?: AccessibilityState;
+  /** Which layers are shown, keyed by the name of the layer. */
+  layerVisibility?: Record<string, boolean>;
+  /** The layers of the document, as the file holds them. */
+  layers?: PdfLayer[];
+  /** The files that are attached to the document. */
+  attachments?: PdfAttachment[];
+  /** The archival standard the document declares itself to be. */
+  pdfa?: { part: string; conformance: string };
+  /** What the document inspector removes on the next write. */
+  sanitize?: SanitizeOptions;
 }
 
 export interface ActiveToolConfig {
@@ -212,6 +246,275 @@ export interface PdfOutlineItem {
   pageNumber: number;
   pageIndex: number;
   children?: PdfOutlineItem[];
+}
+
+/* ------------------------------------------------------------------ *
+ * Review comments
+ *
+ * A comment is a real PDF annotation, not an overlay drawn on the page.
+ * The distinction matters: a comment written here is written into the
+ * file, so Acrobat, Preview and every other reader sees it as a note,
+ * a highlighted phrase or a reply thread.
+ * ------------------------------------------------------------------ */
+
+/** The comment flavours the app writes and recognises. */
+export type PdfCommentKind = 'note' | 'highlight' | 'underline' | 'strikeout' | 'freetext';
+
+/** Review status of a comment, stored as the PDF /State entry. */
+export type PdfCommentStatus = 'Accepted' | 'Rejected' | 'Cancelled' | 'Completed';
+
+/** A rectangle in PDF user space, with the origin at the page's bottom left. */
+export interface PdfRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface PdfComment {
+  /** Stable identifier, also written to the annotation's /NM entry. */
+  id: string;
+  /** Page the comment is anchored to, 0-based. */
+  pageIndex: number;
+  kind: PdfCommentKind;
+  /** Anchor rectangle in PDF points. */
+  rect: PdfRect;
+  /**
+   * Quad points of a text markup, eight numbers per quad in the order
+   * Acrobat expects: top left, top right, bottom left, bottom right.
+   */
+  quads?: number[];
+  /** The comment body. */
+  contents: string;
+  /** Author of the comment. */
+  author: string;
+  /** Creation date as a PDF date string, for example `D:20260101120000+01'00'`. */
+  modified?: string;
+  /** Identifier of the comment this one replies to. */
+  parentId?: string;
+  /** Review status, when the comment has been resolved. */
+  status?: PdfCommentStatus;
+  /** Icon and markup colour, as `#RRGGBB`. */
+  color?: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * Interactive forms
+ * ------------------------------------------------------------------ */
+
+/** The field types of an AcroForm, mapped to what the panel can edit. */
+export type FormFieldKind =
+  | 'text'
+  | 'checkbox'
+  | 'radio'
+  | 'dropdown'
+  | 'listbox'
+  | 'button'
+  | 'signature';
+
+/** A field value: text, a flag, or the selected options of a list. */
+export type FormFieldValue = string | boolean | string[];
+
+export interface FormFieldInfo {
+  /** Fully qualified field name, unique inside one form. */
+  name: string;
+  kind: FormFieldKind;
+  /** Value the field carries in the file. */
+  value: FormFieldValue;
+  /** Choices of a combo box or a list box. */
+  options: string[];
+  readOnly: boolean;
+  required: boolean;
+  multiline: boolean;
+  /** Page the field's widget sits on, 0-based, or -1 when it cannot be found. */
+  pageIndex: number;
+}
+
+/* ------------------------------------------------------------------ *
+ * Hyperlinks
+ * ------------------------------------------------------------------ */
+
+/** Whether a link leaves the document or jumps inside it. */
+export type PdfLinkKind = 'external' | 'internal';
+
+export interface PdfLink {
+  /** Stable identifier, also written to the annotation's /NM entry. */
+  id: string;
+  /** Page the link sits on, 0-based. */
+  pageIndex: number;
+  kind: PdfLinkKind;
+  /** The clickable rectangle, in the app's top-left page space. */
+  rect: PdfRect;
+  /** The address of an external link. */
+  url?: string;
+  /** The page an internal link points at, 0-based. */
+  targetPageIndex?: number;
+  /** How far down the target page the link lands, in PDF points. */
+  targetY?: number;
+}
+
+/* ------------------------------------------------------------------ *
+ * Bookmarks (the document outline)
+ * ------------------------------------------------------------------ */
+
+export interface PdfBookmark {
+  /** Stable identifier. */
+  id: string;
+  /** The text shown in the outline. */
+  title: string;
+  /** The page the bookmark points at, 0-based. */
+  pageIndex: number;
+  /** How far down the page the bookmark lands, in PDF points. */
+  top?: number;
+  /** The bookmarks nested under this one. */
+  children?: PdfBookmark[];
+}
+
+/* ------------------------------------------------------------------ *
+ * Page setup: labels, boxes and transitions
+ * ------------------------------------------------------------------ */
+
+/** The numbering style of a range of page labels. */
+export type PageLabelStyle = 'D' | 'R' | 'r' | 'A' | 'a';
+
+export interface PageLabelRange {
+  /** The first page of the range, 0-based. */
+  startPage: number;
+  /** The style the numbers are written in. */
+  style: PageLabelStyle;
+  /** The number the first page of the range carries. */
+  first: number;
+  /** A prefix written before the number, such as `A-`. */
+  prefix?: string;
+}
+
+/** The page transition effects a document can carry. */
+export type PageTransitionStyle =
+  | 'Split'
+  | 'Blinds'
+  | 'Box'
+  | 'Wipe'
+  | 'Dissolve'
+  | 'Glitter'
+  | 'Fly'
+  | 'Push'
+  | 'Cover'
+  | 'Uncover'
+  | 'Fade';
+
+export interface PageTransition {
+  /** The page the transition belongs to, 0-based. */
+  pageIndex: number;
+  style: PageTransitionStyle;
+  /** How long the transition lasts, in seconds. */
+  duration: number;
+}
+
+/** The boxes a page can carry besides its media box. */
+export type PageBoxKind = 'CropBox' | 'TrimBox' | 'BleedBox' | 'ArtBox';
+
+export interface PageBoxSettings {
+  /** The page the box belongs to, 0-based. */
+  pageIndex: number;
+  box: PageBoxKind;
+  /** The margins measured inward from the media box, in PDF points. */
+  left: number;
+  bottom: number;
+  right: number;
+  top: number;
+}
+
+/* ------------------------------------------------------------------ *
+ * Layers and embedded files
+ * ------------------------------------------------------------------ */
+
+/** An optional content group, the layer a reader can turn on and off. */
+export interface PdfLayer {
+  /** The identity of the group inside the file. */
+  id: string;
+  /** The name the group carries. */
+  name: string;
+  /** Whether the layer is shown. */
+  visible: boolean;
+  /** Whether the layer cannot be turned off. */
+  locked: boolean;
+  /** The pages the layer appears on, 0-based. */
+  pageIndexes: number[];
+}
+
+/** A file that is attached to the document. */
+export interface PdfAttachment {
+  /** The name of the attachment. */
+  id: string;
+  name: string;
+  /** The description of the attachment, when it has one. */
+  description?: string;
+  /** The size of the file in bytes. */
+  size: number;
+  /** The kind of the file, as the file says. */
+  mimeType: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * Accessibility
+ * ------------------------------------------------------------------ */
+
+/**
+ * What the accessibility checker found and what was done about it.
+ *
+ * The settings are written into the file when the document is saved, so
+ * the fixes survive and the document stays accessible afterwards.
+ */
+export interface AccessibilityState {
+  /** Whether the document is tagged by the application. */
+  tagged: boolean;
+  /** The descriptions of the figures, keyed by `page:name`. */
+  altTexts: Record<string, string>;
+  /** The language of the document, written as a language tag. */
+  language?: string;
+  /** The title of the document; an empty title removes it. */
+  title?: string;
+  /** Whether the window title of a reader shows the title of the document. */
+  displayDocTitle?: boolean;
+  /** Whether the form fields carry a description. */
+  fieldDescriptions?: boolean;
+}
+
+/* ------------------------------------------------------------------ *
+ * Document inspector
+ * ------------------------------------------------------------------ */
+
+/**
+ * What the document inspector removes when the file is written.
+ *
+ * Every category maps to a concrete object in the file, so the options
+ * are also what the scanner reports as "found in this document".
+ */
+export interface SanitizeOptions {
+  /** Document information: title, author, subject, keywords, producer. */
+  metadata?: boolean;
+  /** The XMP metadata stream of the catalog. */
+  xmp?: boolean;
+  /** Embedded files attached to the document. */
+  attachments?: boolean;
+  /** Document level JavaScript and automatic actions. */
+  javascript?: boolean;
+  /** Hyperlinks in the document. */
+  links?: boolean;
+  /** Interactive form fields and their widgets. */
+  formFields?: boolean;
+  /** Review comments and their pop-ups. */
+  comments?: boolean;
+}
+
+/** One finding of the document scanner. */
+export interface SanitizeFinding {
+  /** Machine readable category, matching the option names above. */
+  category: keyof SanitizeOptions;
+  /** Human readable description of what was found. */
+  detail: string;
+  /** How many objects of this kind the document holds. */
+  count: number;
 }
 
 export type ReaderFilter = 'normal' | 'sepia' | 'dark' | 'contrast';

@@ -41,6 +41,11 @@
   - [7. Çift PDF Yan Yana Karşılaştırma (Side-by-Side Diff)](#7-çift-pdf-yan-yana-karşılaştırma-side-by-side-diff)
   - [8. Boyut Küçültme (Compress) & Hassas Veri Karartma (Redact)](#8-boyut-küçültme-compress--hassas-veri-karartma-redact)
   - [9. Komut Paleti, Belge Özellikleri, Durum Çubuğu & Sunum Modu](#9-komut-paleti-belge-özellikleri-durum-çubuğu--sunum-modu)
+  - [10. Yorumlar, Etkileşimli Formlar & Belge Denetleyicisi](#10-yorumlar-etkileşimli-formlar--belge-denetleyicisi)
+  - [11. Köprüler, Yer İmleri & Sayfa Ayarları](#11-köprüler-yer-imleri--sayfa-ayarları)
+  - [12. Kurtarma Kopyası & Kayıt Sadakati](#12-kurtarma-kopyası--kayıt-sadakati)
+  - [13. Erişilebilirlik Denetleyicisi](#13-erişilebilirlik-denetleyicisi)
+  - [14. Katmanlar, Gömülü Dosyalar & PDF/A Hazırlığı](#14-katmanlar-gömülü-dosyalar--pdfa-hazırlığı)
 - [🏗️ Sistem Mimarisi & Veri Akışı](#️-sistem-mimarisi--veri-akışı)
 - [⚡ Performans & Kod Bölümleme (Code Splitting)](#-performans--kod-bölümleme-code-splitting)
 - [⌨️ Klavye Kısayolları](#️-klavye-kısayolları)
@@ -120,11 +125,42 @@
 - **Dikkat Dağıtmayan Tam Ekran Sunum Modu (`F11`):** Başlık çubuğu ve menüleri gizleyerek belgeyi odak noktası haline getirir; yüzen minimal gezinme kapsülü ile slayt gibi sunum yapmanızı sağlar.
 - **Glassmorphic Bildirim Sistemi (Toast):** Klasik tarayıcı uyarı pencereleri yerine modern, animasyonlu ve bilgilendirici durum bildirimleri.
 
+### 10. Yorumlar, Etkileşimli Formlar & Belge Denetleyicisi
+- **Gerçek PDF Yorumları:** Yorum aracı ile sayfaya tıklayın, notunuzu yazın; yorum dosyaya **gerçek bir açıklama (annotation)** olarak yazılır. Acrobat, Preview ve PDF.js gibi diğer okuyucular da notu, vurguyu ve yanıt zincirini görür. Yorumlar sol paneldeki **Yorumlar** sekmesinde listelenir; yanıtlanabilir, **Kabul / Reddedildi / Tamamlandı / İptal** durumu verilebilir ve silinebilir. Dosyada hâlihazırda bulunan yorumlar belge açıldığında okunur, kaydedildiğinde korunur.
+- **Etkileşimli Form Alanları:** Formu olan bir PDF'te alanlar **Form Alanları** sekmesinde listelenir: metin alanları, onay kutuları, radyo grupları, açılır listeler ve seçim listeleri. Doldurduğunuz değerler dosyaya yazılır, alanların görünümü (appearance) yeniden üretilir ve **formun kendisi kaydedildikten sonra da bozulmaz** — sayfa kopyalanırken alan sözlüğü kaybolan eski hata giderildi.
+- **Belge Denetleyicisi:** Belgenin içindeki gizli bilgiyi tarar ve seçtiğiniz öğeleri kaldırır: **belge bilgileri** (başlık, yazar, konu, anahtar kelimeler, üretici), **XMP meta verisi**, **gömülü dosyalar**, **betikler ve otomatik eylemler**, **köprüler**, **form alanları** ve **yorumlar**. Kaldırma kaydedildiğinde uygulanır, böylece geri alınabilir.
+
+### 11. Köprüler, Yer İmleri & Sayfa Ayarları
+- **Köprü Yönetimi:** Köprü aracı (`K`) ile sayfada bir alan seçin, ardından dış adres verin ya da belgenin başka bir sayfasını hedefleyin. Köprüler **Köprüler** sekmesinde listelenir; tıklanınca hedefe gidilir, istenirse silinir. Dış bağlantılar URI eylemi, belge içi bağlantılar hedef sayfa olarak yazılır ve sayfalar yeniden sıralandığında bağlantı doğru sayfayı gösterir.
+- **Yer İmi (İçindekiler) Düzenleme:** Yer imleri panelde ağaç olarak düzenlenir: **yeni yer imi ekle**, **yeniden adlandır**, **sil**, **alt yer imi ekle**. Yazılan yer imleri PDF'in içine gömülü outline olarak yazılır, diğer okuyucular da içindekiler tablosunu görür.
+- **Sayfa Ayarları:** **İşlemler → Sayfa Ayarları** ile üç şey yazılır: **sayfa etiketleri** (`i, ii, 1, 2` biçimleri, ön ek ve başlangıç sayısıyla), **sayfa geçişleri** (11 efekt, süreyle) ve **sayfa kutuları** (kırpma, baskı, taşma ve sanat kutuları, medya kutusundan ölçülen kenar boşluklarıyla).
+
+### 12. Kurtarma Kopyası & Kayıt Sadakati
+- **Kurtarma Kopyası (Otomatik Kayıt):** Kaydedilmemiş değişiklikler varken uygulama, açık belgenin bir kopyasını kendi veri klasöründe tutar (`Ayarlar → Dosya & Kaydetme` ile dakika aralığı ayarlanabilir). Uygulama beklenmedik şekilde kapansa bile bir sonraki açılışta karşılama ekranında **"Kaydedilmemiş bir belge bulundu"** kartı çıkar; **Kurtar** ile belge geri gelir. Belge kaydedilince kopya silinir.
+- **Kayıtta korunan dosya:** Sayfalar sıralanmadı, silinmedi ve döndürülmediyse belge **yeniden kurulmadan üzerine yazılır**. Böylece dışa aktarıcının bilmediği her şey yerinde kalır: erişilebilirlik etiketleri (structure tree), gömülü dosyalar, katman grupları (optional content), belge görüntüleme tercihleri ve üretici bilgisi. Sayfa yapısı değiştiğinde uygulama güvenli olan yola (belgeyi yeniden kurma) döner.
+
 ---
 
-## 🏗️ Sistem Mimarisi & Veri Akışı
+### 13. Erişilebilirlik Denetleyicisi
+- **Denetim:** **İşlemler → Erişilebilirlik Denetleyicisi** belgeyi tarar ve ekran okuyucu için neyin eksik olduğunu raporlar: etiketlenmemişlik, **dilin** (`/Lang`) ve **başlığın** olmaması, açıklaması olmayan **görseller**, açıklaması olmayan **form alanları**, içindekiler tablosunun olmaması, betikler ve yardımcı teknoloji izninin işaretlenmemesi. Bulgular pdfcraft ile aynı kural kimlikleriyle (`tagged-pdf`, `primary-language`, `figures-alt-text`, `field-descriptions`…) raporlanır.
+- **Düzeltmeler:** **Belgeyi etiketle** düğmesi belgeye gerçek bir **yapı ağacı** (structure tree) yazar — her sayfa bir paragraf, her görsel bir `/Figure` olur ve sayfa içeriği işaretli içerik (marked content) ile ona bağlanır. Görsellere **alt metin**, forma alanlarına **yardımcı metin** (`/TU`), belgeye **dil** ve **başlık** eklenir; okuyucunun pencere başlığında belge başlığını göstermesi açılır.
+- Düzeltmeler kaydedildiğinde dosyaya yazılır; **etiketleme, sayfa yapısı değişmediği sürece sonraki kayıtlarda korunur** (sayfaları yeniden kurma yoluna geçildiğinde etiket yapısı korunmaz).
 
-PDF Studio Pro, yüksek performans ve güvenlik için ayrık sorumluluk ilkesine (SoC) dayalı modüler bir mimari kullanır:
+### 14. Katmanlar, Gömülü Dosyalar & PDF/A Hazırlığı
+- **Katman Yönetimi (OCG):** Belgedeki katmanlar (optional content grupları) sol paneldeki **Katmanlar** sekmesinde listelenir; her katmanın hangi sayfalarda bulunduğu yazılır ve açılıp kapatılabilir. Durum dosyanın kendi varsayılan yapılandırmasına (`/OCProperties /D /OFF`) yazılır, yani belgeyi açan her okuyucu aynı şeyi görür. Sayfalar yeniden sıralansa bile katmanlar korunur.
+- **Gömülü Dosyalar:** Belgeye eklenmiş dosyalar **Belge Özellikleri** penceresinde listelenir; boyutları ve türleriyle birlikte **Kaydet** ile belgenin yanına ya da indirilerek çıkarılabilir. Tümünü kaldırmak Belge Denetleyicisi'ndeki "gömülü dosyalar" seçeneğiyle yapılır.
+- **PDF/A Hazırlığı:** **İşlemler → PDF/A Hazırlığı** belgeyi arşiv standardı açısından denetler: XMP bildirimi (`pdfaid:part` / `pdfaid:conformance`), çıktı amacının renk profili, gömülmemiş yazı tipleri, betikler, dosya kimliği (`/ID`) ve belge başlığı. **PDF/A-2b** ya da **PDF/A-3b** hedefi seçilip hazırlık uygulandığında belgeye PDF/A bildirimi, dosya kimliği ve başlık yazılır. **Çıktı amacının ICC profili uygulama üretemez**; bu adım raporda açıkça "elle yapılmalı" diye işaretlenir, hiçbir yerde eksik olduğu saklanmaz.
+
+### 15. Çok Dilli Arayüz
+- **İngilizce ve Türkçe:** Tüm arayüz metinleri `src/utils/i18n.ts` içindeki anahtar-değer tablosundan okunur (`t`, `tpl`, `tn`). Ayarlar → Arayüz Dili ile anında geçiş yapılır (tam etki için yeniden başlatma önerilir). Başlık çubuğundaki dünya simgesiyle hızlı geçiş de yapılabilir. Eksik anahtar İngilizce'ye geri düşer.
+
+### 16. PAdES Dijital İmza Hazırlığı
+- **İşlemler → PAdES Dijital İmza Hazırlığı:** Belgenin imza taşıyabilmesi için gerekenleri denetler: AcroForm içinde imza alanı (`/FT /Sig`), imzalanmamış alanlar, şifreli belge, sertifika zinciri (PKCS#12 / PKCS#11) ve RFC 3161 zaman damgası (TSA) gereksinimi. Uygulama şu an **hazırlık raporu** üretir; gerçek CMS/PKCS#7 imzalama native bir crypto yığını ile Tauri arka ucunda yapılmalıdır. Sertifika uygulamada yerelde tutulmaz.
+
+### 17. Komut Satırı (CLI)
+- **`scripts/cli.mjs`:** GUI olmadan PDF'i incelemek için küçük bir Node CLI. `node scripts/cli.mjs inspect <dosya.pdf>` komutu sayfa sayısı, başlık, yazar, üretici ve şifreli olup olmadığı bilgilerini JSON olarak döner. PDF/A ve PAdES denetimleri şu an masaüstü uygulaması ve test paketi üzerinden çalışır.
+
+---
 
 ```mermaid
 graph TD
@@ -197,6 +233,8 @@ Vite 8 ve React 19 mimarisi ile ağır modüller başlangıç paketinden ayrılm
 | <kbd>E</kbd> | **Doğrudan PDF Metin Düzenleme** Aracı |
 | <kbd>P</kbd> | **Serbest Çizim Kalemi** |
 | <kbd>T</kbd> | **Yeni Metin Kutusu Ekle** |
+| <kbd>Y</kbd> | **Yorum (PDF Açıklaması) Ekle** — sayfaya tıklayın |
+| <kbd>K</kbd> | **Köprü Ekle** — sayfada alanı seçin |
 | <kbd>Ctrl</kbd> + <kbd>K</kbd> | **Hızlı Komut Paleti (Spotlight Search)** |
 | <kbd>Ctrl</kbd> + <kbd>D</kbd> | **Belge Özellikleri & Metaveri Bilgisi / Düzenleyici** |
 | <kbd>F11</kbd> | **Tam Ekran Sunum Modu** (Presentation Mode) |
